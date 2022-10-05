@@ -244,7 +244,7 @@ mem_16 = np.array([
 memory_16 = np.array([mem_16, mem_16, mem_16, mem_16]) # up, down, right, left
 
 # No memory for t-maze
-p = 0.4
+p = 0.6
 q = 0.6
 mem_17 = np.array([
     [ # we see the goal as UP

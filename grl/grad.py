@@ -1,13 +1,16 @@
 import logging
+from tqdm import trange
 
 from .mdp import MDP, AbstractMDP
 from .policy_eval import PolicyEval
 from .memory import memory_cross_product
-from .utils import pformat_vals
+from .utils import pformat_vals, ATOL
 
 import numpy as np
 
-def do_grad(spec, pi_abs, grad_type, value_type='v', discrep_type='l2', lr=1):
+def do_grad(spec: dict, pi_abs: np.ndarray, grad_type: str,
+            value_type: str = 'v', discrep_type: str = 'l2', lr: float = 0.01,
+            grad_iterations: int = int(5e4), log_every: int = 1000):
     """
     :param spec:         spec
     :param pi_abs:       pi_abs
@@ -19,6 +22,7 @@ def do_grad(spec, pi_abs, grad_type, value_type='v', discrep_type='l2', lr=1):
         - 'max' uses the highest individual absolute difference across obs(/actions) 
         - (see policy_eval.py)
         - Currently has to be adjusted above directly
+    :param log_every: How often do we log results?
     """
 
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
@@ -52,27 +56,27 @@ def do_grad(spec, pi_abs, grad_type, value_type='v', discrep_type='l2', lr=1):
     policy_eval.verbose = False
     logging.info(f'\nStarting discrep:\n {loss_fn(params, value_type, pi_abs=pi_abs)}')
 
-    i = 0
-    done_count = 0
+    # i = 0
+    # done_count = 0
     # old_params = params
 
-    while done_count < 5:
-        i += 1
+    # while done_count < 5:
+    for i in trange(grad_iterations):
+        # i += 1
 
         old_params = params
         loss, params = update(params, value_type, lr, pi_abs)
 
-        if i % 10 == 0:
+        if i % log_every == 0:
             # print('\n\n')
-            print('Gradient iteration', i)
+            print(f'Gradient iteration {i}, loss: {loss.item():.4f}')
             # print('params_grad\n', params_grad)
-            # print()
             # print('params\n', params)
 
-        if np.allclose(old_params, params):
-            done_count += 1
-        else:
-            done_count = 0
+        # if np.allclose(old_params, params, atol=ATOL):
+        #     done_count += 1
+        # else:
+        #     done_count = 0
 
     # Log results
     logging.info(f'\n\n---- GRAD RESULTS ----\n')

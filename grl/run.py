@@ -19,6 +19,7 @@ from grl.td_lambda import td_lambda
 from grl.policy_eval import PolicyEval
 from grl.memory import memory_cross_product, generate_1bit_mem_fns, generate_mem_fn
 from grl.grad import do_grad
+from grl.analytical_agent import AnalyticalAgent
 from grl.utils import pformat_vals, RTOL
 
 def run_algos(spec, method='a', n_random_policies=0, use_grad=False, n_episodes=500, lr=1):
@@ -49,6 +50,9 @@ def run_algos(spec, method='a', n_random_policies=0, use_grad=False, n_episodes=
 
         if method == 'a' or method == 'b':
             logging.info('\n--- Analytical ---')
+
+            agent = AnalyticalAgent()
+
             mdp_vals_a, mc_vals_a, td_vals_a = pe.run(pi)
             occupancy = pe.get_occupancy(pi)
             pr_oa = (occupancy @ amdp.phi * pi.T)
