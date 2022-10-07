@@ -5,6 +5,7 @@ from functools import partial
 
 @partial(jit, static_argnames=['gamma'])
 def value_iteration_step(vp: jnp.ndarray, T: jnp.ndarray, R: jnp.ndarray, gamma: float):
+    # we repeat values over S x A
     repeated_vp = vp[None, ...]
     repeated_vp = repeated_vp.repeat(R.shape[0] * R.shape[1], axis=0)
     repeated_vp_reshaped = repeated_vp.reshape(R.shape[0], R.shape[1], -1)

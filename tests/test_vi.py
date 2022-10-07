@@ -13,6 +13,6 @@ def test_vi():
     ground_truth_vals = spec['gamma'] ** np.arange(chain_length - 2, -1, -1)
     v = value_iteration(mdp.T, mdp.R, mdp.gamma)
 
-    print(f"Calculated values: {v[:-1]}\n"
+    print(f"Value iteration values: {v[:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
     assert np.all(np.isclose(v[:-1], ground_truth_vals, atol=1e-2))
