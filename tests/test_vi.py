@@ -16,3 +16,28 @@ def test_vi():
     print(f"Value iteration values: {v[:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
     assert np.all(np.isclose(v[:-1], ground_truth_vals, atol=1e-2))
+
+def test_vi_tmaze():
+    spec = environment.load_spec('tmaze_5_two_thirds_up')
+    print(f"Testing value iteration on T-Maze.")
+
+    mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
+    v = value_iteration(mdp.T, mdp.R, mdp.gamma)
+
+    ground_truth_vals = (4 * (spec['gamma'] ** np.arange(8 - 2, -1, -1))).repeat(2)
+
+    print(f"Value iteration values: {v[:-1]}\n"
+          f"Ground-truth values: {ground_truth_vals}")
+    assert np.all(np.isclose(v[:-1], ground_truth_vals, atol=1e-2))
+
+if __name__ == "__main__":
+    test_vi_tmaze()
+
+    # We see what policy we get when we learn with obs only.
+    # Oh no - this doesn't actually work!
+    # no guarantees for memoryless policy
+    spec = environment.load_spec('tmaze_5_two_thirds_up')
+    mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
+
+    amdp = AbstractMDP(mdp, spec['phi'])
+    pe = PolicyEval(amdp)

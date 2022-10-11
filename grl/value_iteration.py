@@ -1,3 +1,4 @@
+import numpy as np
 import jax.numpy as jnp
 from jax import jit
 
@@ -17,7 +18,7 @@ def value_iteration_step(vp: jnp.ndarray, T: jnp.ndarray, R: jnp.ndarray, gamma:
     new_v = (T * g).sum(axis=-1)
 
     # Take max over actions
-    max_new_v = new_v.sum(axis=0)
+    max_new_v = new_v.max(axis=0)
     return max_new_v
 
 def value_iteration(T: jnp.ndarray, R: jnp.ndarray, gamma: float, tol: float = 1e-10)\
