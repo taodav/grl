@@ -6,7 +6,7 @@ hparams = {
     'args': [{
         'algo': 'mi',
         'spec': 'tmaze_hyperparams',
-        'tmaze_corridor_length': 2**np.arange(5),
+        'tmaze_corridor_length': 2**(np.arange(5).astype(int)),
         'tmaze_discount': 0.9,
         'tmaze_junction_up_pi': 2/3,
         'epsilon': 0.,
