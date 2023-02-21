@@ -2,11 +2,11 @@ import numpy as np
 
 hparams = {
     'file_name':
-        'runs_tmaze_corridor_sweep_weight_discrep.txt',
+        'runs_tmaze_corridor_sweep_hallway_discrep.txt',
     'args': [{
         'algo': 'mi',
         'spec': 'tmaze_hyperparams',
-        'tmaze_corridor_length': list(range(1, 6)) + [10],
+        'tmaze_corridor_length': 2**np.arange(5),
         'tmaze_discount': 0.9,
         'tmaze_junction_up_pi': 2/3,
         'epsilon': 0.,
