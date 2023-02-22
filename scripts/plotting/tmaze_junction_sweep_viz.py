@@ -2,6 +2,7 @@ import glob
 from pathlib import Path
 import os
 
+from jax.config import config
 import jax.numpy as jnp
 from jax.nn import softmax
 import matplotlib.pyplot as plt
@@ -11,6 +12,7 @@ import seaborn as sns
 
 from grl.utils import load_info
 from definitions import ROOT_DIR
+config.update('jax_platform_name', 'cpu')
 
 #%%
 def test_mem_matrix(mem_params: jnp.ndarray):
@@ -76,6 +78,9 @@ def load_sampled_results(pathname: str):
 def load_analytical_results(pathname: str, use_epsilon=False):
     results_dir = Path(ROOT_DIR, pathname)
 
+    def aggregate_q_discrep(q_discrep, policy):
+        return (q_discrep.T * policy).sum(-1).mean()
+
     all_results = []
     for results_path in results_dir.iterdir():
         if results_path.suffix != '.npy':
@@ -114,8 +119,6 @@ def load_analytical_results(pathname: str, use_epsilon=False):
 
             policy = eps_policy if use_epsilon else p_up_policy
 
-            def aggregate_q_discrep(q_discrep, policy):
-                return (q_discrep.T * policy).sum(-1).mean()
 
             initial_aggregated_q_discrep = aggregate_q_discrep(initial_q_discrep, policy=policy)
             final_aggregated_q_discrep = aggregate_q_discrep(final_q_discrep, policy=policy)
@@ -178,9 +181,9 @@ def plot_sweep(data: pd.DataFrame, x='policy_up_prob', ax=None, title=None, add_
     plt.gcf().subplots_adjust(right=0.75)
 
 #%%
-planning_data = load_analytical_results('results/analytical/tmaze_sweep_junction_pi_2023-02-17')
+planning_data = load_analytical_results(str(Path(ROOT_DIR, 'results', 'tmaze_sweep_junction_pi')))
 learning_data = load_sampled_results(
-    'results/sample_based/junction-sweep-up-prob-5/tmaze_5_two_thirds_up/*')
+    str(Path(ROOT_DIR, 'results', 'junction-sweep-up-prob-5', 'tmaze_5_two_thirds_up/*')))
 
 np.set_printoptions(precision=4)
 plt.rcParams['axes.facecolor'] = 'white'
@@ -191,11 +194,11 @@ plot_sweep(planning_data, ax=axes[0], title='Planning Agent', add_colorbar=False
 plot_sweep(learning_data, ax=axes[1], title='Learning Agent', add_colorbar=True)
 
 #%%
-planning_data = load_analytical_results(pathname='results/analytical/tmaze_sweep_eps_2023-02-17', use_epsilon=True)
+planning_data = load_analytical_results(pathname=str(Path(ROOT_DIR, 'results', 'tmaze_sweep_eps')), use_epsilon=True)
 # sns.histplot(data=planning_data, x='policy_epsilon', bins=26)
 # sns.histplot(data=learning_data, x='policy_epsilon', bins=26)
 learning_data = load_sampled_results(
-    'results/sample_based/junction-sweep-eps-02/tmaze_5_two_thirds_up/*')
+    str(Path(ROOT_DIR, 'results', 'junction-sweep-eps-02', 'tmaze_5_two_thirds_up/*')))
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 plot_sweep(planning_data, ax=axes[0], x='policy_epsilon', title='Planning Agent', add_colorbar=False)
