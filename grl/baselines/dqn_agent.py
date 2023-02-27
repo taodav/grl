@@ -212,10 +212,10 @@ def train_dqn_agent(mdp: MDP,
     while (steps < total_steps):
         done = False
         train_key, subkey = random.split(train_key)
-        s_0 = random.choice(subkey, mdp.n_states, p=mdp.p0)
+        s_0, _ = mdp.reset()
         a_0 = int(agent.act(jnp.array([[s_0]])))
         while not done:
-            s_1, r_0, done = mdp.step(s_0, a_0, mdp.gamma)
+            s_1, r_0, done, _, _ = mdp.step(a_0)
             a_1 = int(agent.act(jnp.array([[s_1]])))
         
             states.append([s_0])
