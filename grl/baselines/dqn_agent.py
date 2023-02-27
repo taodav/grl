@@ -207,8 +207,7 @@ def train_dqn_agent(mdp: MDP,
 
     steps = 0
     num_eps = 0
-    # going to batch per-episode rather than truly online as this is what david's code originally does
-    # but we could make this online? TODO
+    # Not really batching just updating at each step
     states, actions, next_states, rewards, next_actions = [], [], [], [], []
     while (steps < total_steps):
         done = False
