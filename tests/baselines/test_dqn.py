@@ -11,7 +11,7 @@ from grl.baselines.dqn_agent import train_dqn_agent
 class SimpleNN(hk.Module):
     def __init__(self, output_size, name='basic_mlp'):
         super().__init__(name=name)
-        self._internal_linear_1 = hk.nets.MLP([3, 3, output_size], name='hk_linear')
+        self._internal_linear_1 = hk.nets.MLP([1, output_size], name='hk_linear')
 
     def __call__(self, x):
         return self._internal_linear_1(x)
