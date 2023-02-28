@@ -14,13 +14,20 @@ from typing import Tuple, Callable, Iterable
 from grl import MDP
 
 # Error functions from David's impl
-def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, next_a: int):
+def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
     target = r + g * q1[next_a]
     target = jax.lax.stop_gradient(target)
+    # print(q[a])
+    # print(q1[next_a])
+    # print(r)
+    # print(g)
+    # print(target)
+    # print(a)
+    # print()
     return q[a] - target
 
 
-def expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, next_a: int,
+def expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int,
                          eps: float = 0.1):
     next_greedy_action = q1.argmax()
     pi = jnp.ones_like(q1) * (eps / q1.shape[-1])
@@ -31,7 +38,7 @@ def expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: jnp.ndarray,
     return q[a] - target
 
 
-def qlearning_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, *args):
+def qlearning_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, *args):
     target = r + g * q1.max()
     target = jax.lax.stop_gradient(target)
     return q[a] - target
@@ -134,7 +141,7 @@ class DQNAgent:
         """
         qs = self.Qs(state, network_params)
         return qs[jnp.arange(action.shape[0]), action]
-
+    
     def _loss(self, network_params: hk.Params,
               state: jnp.ndarray,
               action: jnp.ndarray,
@@ -143,9 +150,11 @@ class DQNAgent:
               next_action: jnp.ndarray = None):
         q_s0 = self.Qs(state, network_params)
         q_s1 = self.Qs(next_state, network_params)
+        # print(action)
+        # print(jnp.full(action.shape, self.gamma))
     
 
-        td_err = self.batch_error_fn(q_s0, action, reward, jnp.full(q_s0.shape, self.gamma), q_s1, next_action)
+        td_err = self.batch_error_fn(q_s0, action, reward, jnp.full(action.shape, self.gamma), q_s1, next_action)
         return mse(td_err)
 
     @partial(jit, static_argnums=0)
@@ -218,22 +227,30 @@ def train_dqn_agent(mdp: MDP,
             s_1, r_0, done, _, _ = mdp.step(a_0)
             a_1 = int(agent.act(jnp.array([[s_1]])))
         
-            states.append([s_0])
+            states.append([float(s_0)])
             actions.append(a_0)
-            next_states.append([s_1])
+            next_states.append([float(s_1)])
             next_actions.append(a_1)
             rewards.append(r_0)
-
+            
             s_0 = s_1
             a_0 = a_1
             steps = steps + 1
+            #print([agent.Qs(jnp.array([s]), agent.network_params) for s in range(mdp.n_states)])
+            # print()
+            # print(jnp.array(states))
+            # print(jnp.array(actions))
+            # print(jnp.array(next_states))
+            # print(jnp.array(rewards))
+            # print(jnp.array(next_actions))
+            # print()
+            if steps % 1000 == 0:
+                print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
             
             loss = agent.update(jnp.array(states), jnp.array(actions), jnp.array(next_states), jnp.array(rewards), jnp.array(next_actions))
             states, actions, next_states, rewards, next_actions = [], [], [], [], []                
                 
-        
-        if steps % 1000 == 0:
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
+       
         
         num_eps = num_eps + 1
 
