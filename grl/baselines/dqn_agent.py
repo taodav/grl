@@ -69,7 +69,7 @@ class DQNAgent:
 
         self._rand_key, network_rand_key = random.split(rand_key)
         self.network = network
-        self.network_params = self.network.init(rng=network_rand_key, x=jnp.zeros((1, *self.features_shape), dtype=jnp.float64))
+        self.network_params = self.network.init(rng=network_rand_key, x=jnp.zeros((1, *self.features_shape), dtype=jnp.float32))
         if optimizer == "sgd":
             self.optimizer = sgd(alpha)
         else:
@@ -227,16 +227,16 @@ def train_dqn_agent(mdp: MDP,
         train_key, subkey = random.split(train_key)
         s_0, _ = mdp.reset()
         while not done:
-            s_0_onehot = jax.nn.one_hot(jnp.array([s_0]), mdp.n_states)
-            #print(s_0_onehot)
+            s_0_onehot = jax.nn.one_hot([s_0], mdp.n_states)
+            # print(s_0_onehot)
             a_0 = int(agent.act(s_0_onehot))
             s_1, r_0, done, _, _ = mdp.step(a_0)
-            s_1_onehot = jax.nn.one_hot(jnp.array([s_1]), mdp.n_states)
+            s_1_onehot = jax.nn.one_hot([s_1], mdp.n_states)
             a_1 = int(agent.act(s_1_onehot))
         
-            states.append(s_0_onehot)
+            states.extend(s_0_onehot) # we already batched it into an array
             actions.append(a_0)
-            next_states.append(s_1_onehot)
+            next_states.extend(s_1_onehot)
             terminals.append(done) # TODO 1 even if terminated early; is this correct?
             next_actions.append(a_1)
             rewards.append(r_0)
@@ -247,6 +247,7 @@ def train_dqn_agent(mdp: MDP,
             # print(jnp.array(states))
             # print(jnp.array(actions))
             # print(jnp.array(next_states))
+            # print(jnp.array(terminals))
             # print(jnp.array(rewards))
             # print(jnp.array(next_actions))
             # print()
@@ -257,7 +258,12 @@ def train_dqn_agent(mdp: MDP,
 
             # td_err = agent.batch_error_fn(q_s0, jnp.array(actions), jnp.array(rewards), jnp.where(jnp.array(terminals), 0., mdp.gamma), q_s1, jnp.array(next_actions))
             
-            loss = agent.update(jnp.array(states), jnp.array(actions), jnp.array(next_states), jnp.array(terminals), jnp.array(rewards), jnp.array(next_actions))
+            loss = agent.update(jnp.array(states), 
+                                jnp.array(actions), 
+                                jnp.array(next_states), 
+                                jnp.array(terminals), 
+                                jnp.array(rewards), 
+                                jnp.array(next_actions))
             states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
             if steps % 1000 == 0:
                 print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
