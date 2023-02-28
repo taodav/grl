@@ -10,9 +10,12 @@ from grl import MDP, environment
 from grl.baselines.dqn_agent import train_dqn_agent
 
 class SimpleNN(hk.Module):
-    def __init__(self, output_size, name='basic_mlp'):
+    def __init__(self, input_size, output_size, name='basic_mlp'):
         super().__init__(name=name)
-        self._internal_linear_1 = hk.nets.MLP([1, 10, 10, output_size], name='hk_linear')
+        self._internal_linear_1 = hk.nets.MLP([input_size, 30, output_size], 
+                                              w_init=hk.initializers.RandomUniform(), 
+                                              b_init=hk.initializers.RandomUniform(),
+                                              name='hk_linear')
 
     def __call__(self, x):
         return self._internal_linear_1(x)
@@ -29,7 +32,7 @@ def test_sarsa_chain_mdp():
     ground_truth_vals = spec['gamma']**jnp.arange(chain_length - 2, -1, -1)
 
     def _nn_func(x):
-        module = SimpleNN(mdp.n_actions)
+        module = SimpleNN(mdp.n_states, mdp.n_actions)
         return module(x)
     transformed = hk.without_apply_rng(hk.transform(_nn_func))
 

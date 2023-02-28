@@ -147,6 +147,7 @@ class DQNAgent:
               action: jnp.ndarray,
               next_state: jnp.ndarray,
               reward: jnp.ndarray,
+              terminal: jnp.ndarray,
               next_action: jnp.ndarray = None):
         q_s0 = self.Qs(state, network_params)
         q_s1 = self.Qs(next_state, network_params)
@@ -154,7 +155,7 @@ class DQNAgent:
         # print(jnp.full(action.shape, self.gamma))
     
 
-        td_err = self.batch_error_fn(q_s0, action, reward, jnp.full(action.shape, self.gamma), q_s1, next_action)
+        td_err = self.batch_error_fn(q_s0, action, reward, jnp.where(terminal, 0., self.gamma), q_s1, next_action)
         return mse(td_err)
 
     @partial(jit, static_argnums=0)
@@ -164,10 +165,11 @@ class DQNAgent:
                           state: jnp.ndarray,
                           action: jnp.ndarray,
                           next_state: jnp.ndarray,
+                          terminal: jnp.ndarray,
                           reward: jnp.ndarray,
                           next_action: jnp.ndarray,
                           ) -> Tuple[float, hk.Params, hk.State]:
-        loss, grad = jax.value_and_grad(self._loss)(network_params, state, action, next_state, reward, next_action)
+        loss, grad = jax.value_and_grad(self._loss)(network_params, state, action, next_state, terminal, reward, next_action)
         updates, optimizer_state = self.optimizer.update(grad, optimizer_state, network_params)
         network_params = optax.apply_updates(network_params, updates)
 
@@ -177,6 +179,7 @@ class DQNAgent:
                state: jnp.ndarray,
                action: jnp.ndarray,
                next_state: jnp.ndarray,
+               terminal: jnp.ndarray,
                reward: jnp.ndarray,
                next_action: jnp.ndarray,
                ) -> float:
@@ -185,6 +188,7 @@ class DQNAgent:
         :param state: (b x state_size) batch of states
         :param action: (b x 1) batch of actions
         :param next_state: (b x state_size) batch of next states
+        :param terminal: (b x 1) array of flags; False if next state is not terminal, True if it is
         :param reward: (b x 1) batch of rewards
         :param state: (b x 1) batch of next actions
         :return: loss
@@ -192,7 +196,7 @@ class DQNAgent:
 
         loss, self.network_params, self.optimizer_state = \
             self.functional_update(self.network_params, self.optimizer_state,
-                                   state, action, next_state, reward, next_action)
+                                   state, action, next_state, terminal, reward, next_action)
         return loss
 
 def train_dqn_agent(mdp: MDP, 
@@ -217,7 +221,7 @@ def train_dqn_agent(mdp: MDP,
     steps = 0
     num_eps = 0
     # Not really batching just updating at each step
-    states, actions, next_states, rewards, next_actions = [], [], [], [], []
+    states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
     while (steps < total_steps):
         done = False
         train_key, subkey = random.split(train_key)
@@ -233,6 +237,7 @@ def train_dqn_agent(mdp: MDP,
             states.append(s_0_onehot)
             actions.append(a_0)
             next_states.append(s_1_onehot)
+            terminals.append(done) # TODO 1 even if terminated early; is this correct?
             next_actions.append(a_1)
             rewards.append(r_0)
             
@@ -245,10 +250,15 @@ def train_dqn_agent(mdp: MDP,
             # print(jnp.array(rewards))
             # print(jnp.array(next_actions))
             # print()
+            # print(s_1)
+            # q_s0 = agent.Qs(jnp.array(states), agent.network_params)
+            # q_s1 = agent.Qs(jnp.array(next_states), agent.network_params)
+      
+
+            # td_err = agent.batch_error_fn(q_s0, jnp.array(actions), jnp.array(rewards), jnp.where(jnp.array(terminals), 0., mdp.gamma), q_s1, jnp.array(next_actions))
             
-            
-            loss = agent.update(jnp.array(states), jnp.array(actions), jnp.array(next_states), jnp.array(rewards), jnp.array(next_actions))
-            states, actions, next_states, rewards, next_actions = [], [], [], [], [] 
+            loss = agent.update(jnp.array(states), jnp.array(actions), jnp.array(next_states), jnp.array(terminals), jnp.array(rewards), jnp.array(next_actions))
+            states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
             if steps % 1000 == 0:
                 print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
             s_0 = s_1
