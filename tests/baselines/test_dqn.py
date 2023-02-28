@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 from jax import random
+import jax
 from jax.config import config
 import haiku as hk
 
@@ -11,7 +12,7 @@ from grl.baselines.dqn_agent import train_dqn_agent
 class SimpleNN(hk.Module):
     def __init__(self, output_size, name='basic_mlp'):
         super().__init__(name=name)
-        self._internal_linear_1 = hk.nets.MLP([1, 3, output_size], name='hk_linear')
+        self._internal_linear_1 = hk.nets.MLP([1, 10, 10, output_size], name='hk_linear')
 
     def __call__(self, x):
         return self._internal_linear_1(x)
@@ -34,9 +35,8 @@ def test_sarsa_chain_mdp():
 
     trained_agent = train_dqn_agent(mdp, transformed, n_steps, random.PRNGKey(2023), algo = "sarsa")
 
-    print(jnp.array([trained_agent.Qs(jnp.array([s]), trained_agent.network_params) for s in range(mdp.n_states)]))
 
-    v = jnp.array([jnp.sum(trained_agent.Qs(jnp.array([s]), trained_agent.network_params)) for s in range(mdp.n_states)])
+    v = jnp.array([jnp.sum(trained_agent.Qs(jax.nn.one_hot(jnp.array([s]), mdp.n_states), trained_agent.network_params)) for s in range(mdp.n_states)])
 
     print(f"Calculated values: {v[:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
