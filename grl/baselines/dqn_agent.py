@@ -12,6 +12,7 @@ from optax import sgd, GradientTransformation
 from pathlib import Path
 from typing import Tuple, Callable, Iterable
 from grl import MDP
+from grl.mdp import one_hot
 
 # Error functions from David's impl
 def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, next_a: int):
@@ -56,7 +57,7 @@ class DQNAgent:
                  algo: str = "sarsa",):
     
         # TODO know that observation from MDP/AMDP is always a single int;
-        self.features_shape = (1,)
+        self.features_shape = (10,)
         self.n_actions = n_actions
         self.gamma = gamma
 
@@ -213,24 +214,30 @@ def train_dqn_agent(mdp: MDP,
         done = False
         train_key, subkey = random.split(train_key)
         s_0, _ = mdp.reset()
-        a_0 = int(agent.act(jnp.array([[s_0]])))
+        s_0_processed = jnp.array([one_hot(s_0, mdp.n_obs)])
+        # a_0 = int(agent.act(jnp.array([[s_0]])))
+        a_0 = int(agent.act(s_0_processed))
         while not done:
             s_1, r_0, done, _, _ = mdp.step(a_0)
-            a_1 = int(agent.act(jnp.array([[s_1]])))
-        
-            states.append([s_0])
+            s_1_processed = jnp.array([one_hot(s_1, mdp.n_obs)])
+            # a_1 = int(agent.act(jnp.array([[s_1]])))
+            a_1 = int(agent.act(s_1_processed))
+
+            # states.append([s_0])
+            states.append(s_0_processed)
             actions.append(a_0)
-            next_states.append([s_1])
+            # next_states.append([s_1])
+            next_states.append(s_1_processed)
             next_actions.append(a_1)
             rewards.append(r_0)
 
-            s_0 = s_1
+            loss = agent.update(s_0_processed, jnp.array(actions), s_1_processed, jnp.array(rewards), jnp.array(next_actions))
+            # s_0 = s_1
+            s_0_processed = s_1_processed
             a_0 = a_1
             steps = steps + 1
-            
-            loss = agent.update(jnp.array(states), jnp.array(actions), jnp.array(next_states), jnp.array(rewards), jnp.array(next_actions))
-            states, actions, next_states, rewards, next_actions = [], [], [], [], []                
-                
+            states, actions, next_states, rewards, next_actions = [], [], [], [], []
+
         
         if steps % 1000 == 0:
             print(f"Step {steps} | Episode {num_eps} | Loss {loss}")

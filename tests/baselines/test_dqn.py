@@ -7,11 +7,12 @@ config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, environment
 from grl.baselines.dqn_agent import train_dqn_agent
+from grl.mdp import one_hot
 
 class SimpleNN(hk.Module):
     def __init__(self, output_size, name='basic_mlp'):
         super().__init__(name=name)
-        self._internal_linear_1 = hk.nets.MLP([1, output_size], name='hk_linear')
+        self._internal_linear_1 = hk.nets.MLP([10, output_size], name='hk_linear')
 
     def __call__(self, x):
         return self._internal_linear_1(x)
@@ -34,11 +35,15 @@ def test_sarsa_chain_mdp():
 
     trained_agent = train_dqn_agent(mdp, transformed, n_steps, random.PRNGKey(2023), algo = "sarsa")
 
-    print(jnp.array([trained_agent.Qs(jnp.array([s]), trained_agent.network_params) for s in range(mdp.n_states)]))
+    # print(jnp.array([trained_agent.Qs(jnp.array([s]), trained_agent.network_params) for s in range(mdp.n_states)]))
 
-    v = jnp.array([jnp.sum(trained_agent.Qs(jnp.array([s]), trained_agent.network_params)) for s in range(mdp.n_states)])
+    # v = jnp.array([jnp.sum(trained_agent.Qs(jnp.array([s]), trained_agent.network_params)) for s in range(mdp.n_states)])
+    v = jnp.array([jnp.sum(trained_agent.Qs(jnp.array([one_hot(s, mdp.n_obs)]), trained_agent.network_params)) for s in range(mdp.n_states)])
 
     print(f"Calculated values: {v[:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
     assert jnp.all(jnp.isclose(v[:-1], ground_truth_vals, atol=1e-2))
 
+
+if __name__ == "__main__":
+    test_sarsa_chain_mdp()
