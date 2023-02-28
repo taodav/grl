@@ -54,6 +54,7 @@ def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
 
 class DQNAgent:
     def __init__(self, network: hk.Transformed,
+                 features_shape,
                  n_actions: int,
                  gamma: float,
                  rand_key: random.PRNGKey,
@@ -62,14 +63,13 @@ class DQNAgent:
                  alpha: float = 0.01,
                  algo: str = "sarsa",):
     
-        # TODO know that observation from MDP/AMDP is always a single int;
-        self.features_shape = (1,)
+        self.features_shape = features_shape
         self.n_actions = n_actions
         self.gamma = gamma
 
         self._rand_key, network_rand_key = random.split(rand_key)
         self.network = network
-        self.network_params = self.network.init(rng=network_rand_key, x=jnp.zeros((1, *self.features_shape)))
+        self.network_params = self.network.init(rng=network_rand_key, x=jnp.zeros((1, *self.features_shape), dtype=jnp.float64))
         if optimizer == "sgd":
             self.optimizer = sgd(alpha)
         else:
@@ -212,7 +212,7 @@ def train_dqn_agent(mdp: MDP,
     :return: trained agent
     """
     train_key, subkey = random.split(rand_key)
-    agent = DQNAgent(network, mdp.n_actions, mdp.gamma, subkey, epsilon, optimizer, alpha, algo)
+    agent = DQNAgent(network, (mdp.n_states,), mdp.n_actions, mdp.gamma, subkey, epsilon, optimizer, alpha, algo)
 
     steps = 0
     num_eps = 0
@@ -223,18 +223,20 @@ def train_dqn_agent(mdp: MDP,
         train_key, subkey = random.split(train_key)
         s_0, _ = mdp.reset()
         while not done:
-            a_0 = int(agent.act(jnp.array([[s_0]])))
+            s_0_onehot = jax.nn.one_hot(jnp.array([s_0]), mdp.n_states)
+            #print(s_0_onehot)
+            a_0 = int(agent.act(s_0_onehot))
             s_1, r_0, done, _, _ = mdp.step(a_0)
-            a_1 = int(agent.act(jnp.array([[s_1]])))
+            s_1_onehot = jax.nn.one_hot(jnp.array([s_1]), mdp.n_states)
+            a_1 = int(agent.act(s_1_onehot))
         
-            states.append([float(s_0)])
+            states.append(s_0_onehot)
             actions.append(a_0)
-            next_states.append([float(s_1)])
+            next_states.append(s_1_onehot)
             next_actions.append(a_1)
             rewards.append(r_0)
             
-            s_0 = s_1
-            steps = steps + 1
+            
             #print([agent.Qs(jnp.array([s]), agent.network_params) for s in range(mdp.n_states)])
             # print()
             # print(jnp.array(states))
@@ -243,11 +245,14 @@ def train_dqn_agent(mdp: MDP,
             # print(jnp.array(rewards))
             # print(jnp.array(next_actions))
             # print()
-            if steps % 1000 == 0:
-                print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
+            
             
             loss = agent.update(jnp.array(states), jnp.array(actions), jnp.array(next_states), jnp.array(rewards), jnp.array(next_actions))
-            states, actions, next_states, rewards, next_actions = [], [], [], [], []                
+            states, actions, next_states, rewards, next_actions = [], [], [], [], [] 
+            if steps % 1000 == 0:
+                print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
+            s_0 = s_1
+            steps = steps + 1               
                 
        
         
