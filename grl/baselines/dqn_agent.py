@@ -222,8 +222,8 @@ def train_dqn_agent(mdp: MDP,
         done = False
         train_key, subkey = random.split(train_key)
         s_0, _ = mdp.reset()
-        a_0 = int(agent.act(jnp.array([[s_0]])))
         while not done:
+            a_0 = int(agent.act(jnp.array([[s_0]])))
             s_1, r_0, done, _, _ = mdp.step(a_0)
             a_1 = int(agent.act(jnp.array([[s_1]])))
         
@@ -234,7 +234,6 @@ def train_dqn_agent(mdp: MDP,
             rewards.append(r_0)
             
             s_0 = s_1
-            a_0 = a_1
             steps = steps + 1
             #print([agent.Qs(jnp.array([s]), agent.network_params) for s in range(mdp.n_states)])
             # print()
