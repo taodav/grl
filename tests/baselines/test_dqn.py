@@ -7,7 +7,7 @@ import haiku as hk
 config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, environment
-from grl.baselines.dqn_agent import train_dqn_agent
+from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
 
 class SimpleNN(hk.Module):
     def __init__(self, input_size, output_size, name='basic_mlp'):
@@ -36,10 +36,14 @@ def test_sarsa_chain_mdp():
         return module(x)
     transformed = hk.without_apply_rng(hk.transform(_nn_func))
 
-    trained_agent = train_dqn_agent(mdp, transformed, n_steps, random.PRNGKey(2023), algo = "sarsa")
+    rand_key = random.PRNGKey(2023)
+    rand_key, subkey = random.split(rand_key)
+    agent = DQNAgent(transformed, (mdp.n_states,), mdp.n_actions, mdp.gamma, subkey, algo = "sarsa")
+
+    agent = train_dqn_agent(mdp, agent, 20000)
 
 
-    v = jnp.array([jnp.sum(trained_agent.Qs(jax.nn.one_hot(jnp.array([s]), mdp.n_states), trained_agent.network_params)) for s in range(mdp.n_states)])
+    v = jnp.array([jnp.sum(agent.Qs(jax.nn.one_hot(jnp.array([s]), mdp.n_states), agent.network_params)) for s in range(mdp.n_states)])
 
     print(f"Calculated values: {v[:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
