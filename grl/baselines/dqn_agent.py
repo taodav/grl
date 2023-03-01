@@ -12,15 +12,18 @@ from optax import sgd, GradientTransformation
 from pathlib import Path
 from typing import Tuple, Callable, Iterable
 from grl import MDP
+from grl.utils.batching import JaxBatch
 
 # Error functions from David's impl
 def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
-    target = r + g * q1[next_a]
-    target = jax.lax.stop_gradient(target)
-    # print(q[a])
-    # print(q1[next_a])
+    # print(a)
+    # print(next_a)
     # print(r)
     # print(g)
+    
+    target = r + g * q1[next_a]
+    target = jax.lax.stop_gradient(target)
+   
     # print(target)
     # print(a)
     # print()
@@ -143,104 +146,71 @@ class DQNAgent:
         return qs[jnp.arange(action.shape[0]), action]
     
     def _loss(self, network_params: hk.Params,
-              state: jnp.ndarray,
-              action: jnp.ndarray,
-              next_state: jnp.ndarray,
-              reward: jnp.ndarray,
-              terminal: jnp.ndarray,
-              next_action: jnp.ndarray = None):
-        q_s0 = self.Qs(state, network_params)
-        q_s1 = self.Qs(next_state, network_params)
+             batch: JaxBatch):
+        q_s0 = self.Qs(batch.obs, network_params)
+        q_s1 = self.Qs(batch.next_obs, network_params)
         # print(action)
         # print(jnp.full(action.shape, self.gamma))
     
 
-        td_err = self.batch_error_fn(q_s0, action, reward, jnp.where(terminal, 0., self.gamma), q_s1, next_action)
+        td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)
         return mse(td_err)
 
     @partial(jit, static_argnums=0)
     def functional_update(self,
                           network_params: hk.Params,
                           optimizer_state: hk.State,
-                          state: jnp.ndarray,
-                          action: jnp.ndarray,
-                          next_state: jnp.ndarray,
-                          terminal: jnp.ndarray,
-                          reward: jnp.ndarray,
-                          next_action: jnp.ndarray,
+                          batch: JaxBatch
                           ) -> Tuple[float, hk.Params, hk.State]:
-        loss, grad = jax.value_and_grad(self._loss)(network_params, state, action, next_state, terminal, reward, next_action)
+        loss, grad = jax.value_and_grad(self._loss)(network_params, batch)
         updates, optimizer_state = self.optimizer.update(grad, optimizer_state, network_params)
         network_params = optax.apply_updates(network_params, updates)
 
         return loss, network_params, optimizer_state
 
     def update(self, 
-               state: jnp.ndarray,
-               action: jnp.ndarray,
-               next_state: jnp.ndarray,
-               terminal: jnp.ndarray,
-               reward: jnp.ndarray,
-               next_action: jnp.ndarray,
+               batch: JaxBatch
                ) -> float:
         """
         Update given a batch of data
-        :param state: (b x state_size) batch of states
-        :param action: (b x 1) batch of actions
-        :param next_state: (b x state_size) batch of next states
-        :param terminal: (b x 1) array of flags; False if next state is not terminal, True if it is
-        :param reward: (b x 1) batch of rewards
-        :param state: (b x 1) batch of next actions
+        :param batch: JaxBatch of data to process.
         :return: loss
         """
 
         loss, self.network_params, self.optimizer_state = \
-            self.functional_update(self.network_params, self.optimizer_state,
-                                   state, action, next_state, terminal, reward, next_action)
+            self.functional_update(self.network_params, self.optimizer_state, batch)
         return loss
 
-def train_dqn_agent(mdp: MDP, 
-                    network: hk.Transformed, 
-                    total_steps: int, 
-                    rand_key: random.PRNGKey,
-                    epsilon: float = 0.1,
-                    optimizer: str = "sgd",
-                    alpha: float = 0.01,
-                    algo: str = "sarsa"):
+def train_dqn_agent(mdp: MDP,
+                    agent: DQNAgent,
+                    total_steps: int):
     """
     Training loop for a dqn agent.
     :param mdp: mdp to train on. Currently DQN does not support AMDPs.
-    :param network: neural net to use as Q function approximator
-    :param episodes: number of episodes to train for
-    :param algo: algorithm to use, one of "sarsa", "esarsa", "qlearning"
-    :return: trained agent
+    :param agent: DQNAgent to train.
+    :param total_steps: Number of steps to train for.
     """
-    train_key, subkey = random.split(rand_key)
-    agent = DQNAgent(network, (mdp.n_states,), mdp.n_actions, mdp.gamma, subkey, epsilon, optimizer, alpha, algo)
 
     steps = 0
     num_eps = 0
     # Not really batching just updating at each step
-    states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
+    batch = JaxBatch(mdp.n_states)
     while (steps < total_steps):
         done = False
-        train_key, subkey = random.split(train_key)
         s_0, _ = mdp.reset()
         while not done:
-            s_0_onehot = jax.nn.one_hot([s_0], mdp.n_states)
+            batch.append_observations([s_0])
             # print(s_0_onehot)
-            a_0 = int(agent.act(s_0_onehot))
+            a_0 = int(agent.act(jnp.array([batch.obs[-1]])))
+            batch.append_actions([a_0])
+
             s_1, r_0, done, _, _ = mdp.step(a_0)
-            s_1_onehot = jax.nn.one_hot([s_1], mdp.n_states)
-            a_1 = int(agent.act(s_1_onehot))
-        
-            states.extend(s_0_onehot) # we already batched it into an array
-            actions.append(a_0)
-            next_states.extend(s_1_onehot)
-            terminals.append(done) # TODO 1 even if terminated early; is this correct?
-            next_actions.append(a_1)
-            rewards.append(r_0)
-            
+            batch.append_next_observations([s_1])
+            batch.append_rewards([r_0])
+            batch.append_terminals([done])
+
+            a_1 = int(agent.act(jnp.array([batch.next_obs[-1]])))
+            batch.append_next_actions([a_1])
             
             #print([agent.Qs(jnp.array([s]), agent.network_params) for s in range(mdp.n_states)])
             # print()
@@ -258,15 +228,11 @@ def train_dqn_agent(mdp: MDP,
 
             # td_err = agent.batch_error_fn(q_s0, jnp.array(actions), jnp.array(rewards), jnp.where(jnp.array(terminals), 0., mdp.gamma), q_s1, jnp.array(next_actions))
             
-            loss = agent.update(jnp.array(states), 
-                                jnp.array(actions), 
-                                jnp.array(next_states), 
-                                jnp.array(terminals), 
-                                jnp.array(rewards), 
-                                jnp.array(next_actions))
-            states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
+            loss = agent.update(batch)
             if steps % 1000 == 0:
                 print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
+            
+            batch = JaxBatch(mdp.n_states)
             s_0 = s_1
             steps = steps + 1               
                 
