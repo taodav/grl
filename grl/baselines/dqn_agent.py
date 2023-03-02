@@ -7,10 +7,9 @@ import jax.numpy as jnp
 import haiku as hk
 import optax
 from functools import partial
-from jax import random, jit, vmap, value_and_grad
-from optax import sgd, GradientTransformation
-from pathlib import Path
-from typing import Tuple, Callable, Iterable
+from jax import random, jit, vmap
+from optax import sgd
+from typing import Tuple
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
@@ -203,7 +202,7 @@ def train_dqn_agent(mdp: MDP,
         # a_0 = int(agent.act(jnp.array([[s_0]])))
         a_0 = int(agent.act(s_0_processed))
         while not done:
-            s_1, r_0, done, _, _ = mdp.step(a_0)
+            s_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
 
             s_1_processed = jnp.array([one_hot(s_1, mdp.n_obs)])
             # a_1 = int(agent.act(jnp.array([[s_1]])))
