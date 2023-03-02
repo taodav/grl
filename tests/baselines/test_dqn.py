@@ -3,6 +3,7 @@ from jax import random
 import jax
 from jax.config import config
 import haiku as hk
+from grl.mdp import one_hot
 
 config.update('jax_platform_name', 'cpu')
 
@@ -12,7 +13,7 @@ from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
 class SimpleNN(hk.Module):
     def __init__(self, input_size, output_size, name='basic_mlp'):
         super().__init__(name=name)
-        self._internal_linear_1 = hk.nets.MLP([input_size, 30, output_size], 
+        self._internal_linear_1 = hk.nets.MLP([input_size, output_size], 
                                               w_init=hk.initializers.RandomUniform(), 
                                               b_init=hk.initializers.RandomUniform(),
                                               name='hk_linear')
@@ -38,14 +39,17 @@ def test_sarsa_chain_mdp():
 
     rand_key = random.PRNGKey(2023)
     rand_key, subkey = random.split(rand_key)
-    agent = DQNAgent(transformed, (mdp.n_states,), mdp.n_actions, mdp.gamma, subkey, algo = "sarsa")
+    agent = DQNAgent(transformed, (mdp.n_obs,), mdp.n_actions, mdp.gamma, subkey, algo = "sarsa")
 
     agent = train_dqn_agent(mdp, agent, 20000)
 
 
-    v = jnp.array([jnp.sum(agent.Qs(jax.nn.one_hot(jnp.array([s]), mdp.n_states), agent.network_params)) for s in range(mdp.n_states)])
+    v = jnp.array([jnp.sum(agent.Qs(one_hot(s, mdp.n_obs), agent.network_params)) for s in range(mdp.n_obs)])
 
     print(f"Calculated values: {v[:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
     assert jnp.all(jnp.isclose(v[:-1], ground_truth_vals, atol=1e-2))
+
+    if __name__ == "__main__":
+        test_sarsa_chain_mdp()
 

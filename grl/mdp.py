@@ -140,8 +140,9 @@ class MDP:
         is_absorbing = (self.T[:, next_state, next_state] == 1)
         terminal = is_absorbing.all() # absorbing for all actions
         # Discounting: end episode with probability 1-gamma
-        if np.random.uniform() < (1 - self.gamma):
-            terminal = True
+        # TODO temporarily disabled; should we add a flag for this?
+        # if np.random.uniform() < (1 - self.gamma):
+        #     terminal = True
         truncated = False
         observation = self.observe(next_state)
         info = {'state': next_state}

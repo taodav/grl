@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Tuple, Callable, Iterable
 from grl import MDP
 from grl.utils.batching import JaxBatch
+from grl.mdp import one_hot
 
 # Error functions from David's impl
 def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
@@ -194,23 +195,33 @@ def train_dqn_agent(mdp: MDP,
     steps = 0
     num_eps = 0
     # Not really batching just updating at each step
-    batch = JaxBatch(mdp.n_states)
+    states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
     while (steps < total_steps):
         done = False
         s_0, _ = mdp.reset()
+        s_0_processed = jnp.array([one_hot(s_0, mdp.n_obs)])
+        # a_0 = int(agent.act(jnp.array([[s_0]])))
+        a_0 = int(agent.act(s_0_processed))
         while not done:
-            batch.append_observations([s_0])
-            # print(s_0_onehot)
-            a_0 = int(agent.act(jnp.array([batch.obs[-1]])))
-            batch.append_actions([a_0])
-
             s_1, r_0, done, _, _ = mdp.step(a_0)
-            batch.append_next_observations([s_1])
-            batch.append_rewards([r_0])
-            batch.append_terminals([done])
 
-            a_1 = int(agent.act(jnp.array([batch.next_obs[-1]])))
-            batch.append_next_actions([a_1])
+            s_1_processed = jnp.array([one_hot(s_1, mdp.n_obs)])
+            # a_1 = int(agent.act(jnp.array([[s_1]])))
+            a_1 = int(agent.act(s_1_processed))
+
+            states.append(s_0_processed)
+            actions.append(a_0)
+            next_states.append(s_1_processed)
+            terminals.append(done)
+            next_actions.append(a_1)
+            rewards.append(r_0)
+
+            batch = JaxBatch(obs=states, 
+                             actions=actions, 
+                             next_obs=next_states, 
+                             terminals=terminals, 
+                             rewards=rewards, 
+                             next_actions=next_actions)
             
             #print([agent.Qs(jnp.array([s]), agent.network_params) for s in range(mdp.n_states)])
             # print()
@@ -229,12 +240,17 @@ def train_dqn_agent(mdp: MDP,
             # td_err = agent.batch_error_fn(q_s0, jnp.array(actions), jnp.array(rewards), jnp.where(jnp.array(terminals), 0., mdp.gamma), q_s1, jnp.array(next_actions))
             
             loss = agent.update(batch)
+            s_0_processed = s_1_processed
+            a_0 = a_1
+
+            steps = steps + 1
+            states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
+               
+
+
             if steps % 1000 == 0:
                 print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
-            
-            batch = JaxBatch(mdp.n_states)
-            s_0 = s_1
-            steps = steps + 1               
+                       
                 
        
         
