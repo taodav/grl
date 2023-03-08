@@ -13,9 +13,22 @@ from typing import Tuple
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
+from dataclasses import dataclass
+
+@dataclass
+class DQNArgs:
+    features_shape: Tuple[int]
+    n_actions: int
+    gamma: float
+    rand_key: random.PRNGKey
+    epsilon: float = 0.1
+    optimizer: str = "sgd"
+    alpha: float = 0.01
+    algo: str = "sarsa"
+    trunc_len: int = None
 
 # Error functions from David's impl
-def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
+def _sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
     # print(a)
     # print(next_a)
     # print(r)
@@ -30,7 +43,7 @@ def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarra
     return q[a] - target
 
 
-def expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int,
+def _expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int,
                          eps: float = 0.1):
     next_greedy_action = q1.argmax()
     pi = jnp.ones_like(q1) * (eps / q1.shape[-1])
@@ -41,12 +54,12 @@ def expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: j
     return q[a] - target
 
 
-def qlearning_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, *args):
+def _qlearning_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, *args):
     target = r + g * q1.max()
     target = jax.lax.stop_gradient(target)
     return q[a] - target
 
-def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
+def _mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
     if targets is None:
         targets = jnp.zeros_like(predictions)
     squared_diff = 0.5 * (predictions - targets) ** 2
@@ -57,36 +70,29 @@ def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
 
 class DQNAgent:
     def __init__(self, network: hk.Transformed,
-                 features_shape,
-                 n_actions: int,
-                 gamma: float,
-                 rand_key: random.PRNGKey,
-                 epsilon: float = 0.1,
-                 optimizer: str = "sgd",
-                 alpha: float = 0.01,
-                 algo: str = "sarsa",):
+                 args: DQNArgs):
     
-        self.features_shape = features_shape
-        self.n_actions = n_actions
-        self.gamma = gamma
+        self.features_shape = args.features_shape
+        self.n_actions = args.n_actions
+        self.gamma = args.gamma
 
-        self._rand_key, network_rand_key = random.split(rand_key)
+        self._rand_key, network_rand_key = random.split(args.rand_key)
         self.network = network
         self.network_params = self.network.init(rng=network_rand_key, x=jnp.zeros((1, *self.features_shape), dtype=jnp.float32))
-        if optimizer == "sgd":
-            self.optimizer = sgd(alpha)
+        if args.optimizer == "sgd":
+            self.optimizer = sgd(args.alpha)
         else:
-            raise ValueError(f"Unrecognized optimizer {optimizer}")
+            raise ValueError(f"Unrecognized optimizer {args.optimizer}")
         self.optimizer_state = self.optimizer.init(self.network_params)
-        self.eps = epsilon
+        self.eps = args.epsilon
 
         self.error_fn = None
-        if algo == 'sarsa':
-            self.error_fn = sarsa_error
-        elif algo == 'esarsa':
-            self.error_fn = expected_sarsa_error
-        elif algo == 'qlearning':
-            self.error_fn = qlearning_error
+        if args.algo == 'sarsa':
+            self.error_fn = _sarsa_error
+        elif args.algo == 'esarsa':
+            self.error_fn = _expected_sarsa_error
+        elif args.algo == 'qlearning':
+            self.error_fn = _qlearning_error
         self.batch_error_fn = vmap(self.error_fn)
 
     def act(self, state: jnp.ndarray) -> jnp.ndarray:
@@ -154,7 +160,7 @@ class DQNAgent:
     
 
         td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)
-        return mse(td_err)
+        return _mse(td_err)
 
     @partial(jit, static_argnums=0)
     def functional_update(self,

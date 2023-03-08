@@ -8,7 +8,7 @@ from grl.mdp import one_hot
 config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, environment
-from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
+from grl.baselines.dqn_agent import DQNAgent, DQNArgs, train_dqn_agent
 
 class SimpleNN(hk.Module):
     def __init__(self, input_size, output_size, name='basic_mlp'):
@@ -39,7 +39,8 @@ def test_sarsa_chain_mdp():
 
     rand_key = random.PRNGKey(2023)
     rand_key, subkey = random.split(rand_key)
-    agent = DQNAgent(transformed, (mdp.n_obs,), mdp.n_actions, mdp.gamma, subkey, algo = "sarsa")
+    agent_args = DQNArgs((mdp.n_obs,), mdp.n_actions, mdp.gamma, subkey, algo = "sarsa")
+    agent = DQNAgent(transformed, agent_args)
 
     agent = train_dqn_agent(mdp, agent, 20000)
 
