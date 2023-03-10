@@ -42,7 +42,7 @@ def test_sarsa_chain_mdp():
     agent_args = DQNArgs((mdp.n_obs,), mdp.n_actions, mdp.gamma, subkey, algo = "sarsa")
     agent = DQNAgent(transformed, agent_args)
 
-    agent = train_dqn_agent(mdp, agent, 20000)
+    agent = train_dqn_agent(mdp, agent, n_steps)
 
 
     v = jnp.array([jnp.sum(agent.Qs(one_hot(s, mdp.n_obs), agent.network_params)) for s in range(mdp.n_obs)])

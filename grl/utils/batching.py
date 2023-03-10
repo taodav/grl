@@ -46,3 +46,13 @@ class JaxBatch:
         obj.next_actions = children[5]
         return obj
     
+    def __str__(self) -> str:
+        return f"""
+            obs: {self.obs} \n
+            actions: {self.actions} \n
+            next_obs: {self.next_obs} \n
+            terminals: {self.terminals} \n
+            rewards: {self.rewards} \n
+            next_actions: {self.next_actions} \n
+        """
+    

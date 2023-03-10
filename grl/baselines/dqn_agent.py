@@ -9,7 +9,7 @@ import optax
 from functools import partial
 from jax import random, jit, vmap
 from optax import sgd
-from typing import Tuple
+from typing import Tuple, Union
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
@@ -27,8 +27,9 @@ class DQNArgs:
     algo: str = "sarsa"
     trunc_len: int = None
 
+
 # Error functions from David's impl
-def _sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
+def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
     # print(a)
     # print(next_a)
     # print(r)
@@ -43,7 +44,7 @@ def _sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarr
     return q[a] - target
 
 
-def _expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int,
+def expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int,
                          eps: float = 0.1):
     next_greedy_action = q1.argmax()
     pi = jnp.ones_like(q1) * (eps / q1.shape[-1])
@@ -54,12 +55,12 @@ def _expected_sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: 
     return q[a] - target
 
 
-def _qlearning_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, *args):
+def qlearning_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, *args):
     target = r + g * q1.max()
     target = jax.lax.stop_gradient(target)
     return q[a] - target
 
-def _mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
+def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
     if targets is None:
         targets = jnp.zeros_like(predictions)
     squared_diff = 0.5 * (predictions - targets) ** 2
@@ -71,7 +72,6 @@ def _mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
 class DQNAgent:
     def __init__(self, network: hk.Transformed,
                  args: DQNArgs):
-    
         self.features_shape = args.features_shape
         self.n_actions = args.n_actions
         self.gamma = args.gamma
@@ -82,17 +82,17 @@ class DQNAgent:
         if args.optimizer == "sgd":
             self.optimizer = sgd(args.alpha)
         else:
-            raise ValueError(f"Unrecognized optimizer {args.optimizer}")
+            raise NotImplementedError(f"Unrecognized optimizer {args.optimizer}")
         self.optimizer_state = self.optimizer.init(self.network_params)
         self.eps = args.epsilon
 
         self.error_fn = None
         if args.algo == 'sarsa':
-            self.error_fn = _sarsa_error
+            self.error_fn = sarsa_error
         elif args.algo == 'esarsa':
-            self.error_fn = _expected_sarsa_error
+            self.error_fn = expected_sarsa_error
         elif args.algo == 'qlearning':
-            self.error_fn = _qlearning_error
+            self.error_fn = qlearning_error
         self.batch_error_fn = vmap(self.error_fn)
 
     def act(self, state: jnp.ndarray) -> jnp.ndarray:
@@ -160,7 +160,7 @@ class DQNAgent:
     
 
         td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)
-        return _mse(td_err)
+        return mse(td_err)
 
     @partial(jit, static_argnums=0)
     def functional_update(self,
@@ -205,13 +205,11 @@ def train_dqn_agent(mdp: MDP,
         done = False
         s_0, _ = mdp.reset()
         s_0_processed = jnp.array([one_hot(s_0, mdp.n_obs)])
-        # a_0 = int(agent.act(jnp.array([[s_0]])))
         a_0 = int(agent.act(s_0_processed))
         while not done:
             s_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
 
             s_1_processed = jnp.array([one_hot(s_1, mdp.n_obs)])
-            # a_1 = int(agent.act(jnp.array([[s_1]])))
             a_1 = int(agent.act(s_1_processed))
 
             states.append(s_0_processed)
@@ -227,22 +225,6 @@ def train_dqn_agent(mdp: MDP,
                              terminals=terminals, 
                              rewards=rewards, 
                              next_actions=next_actions)
-            
-            #print([agent.Qs(jnp.array([s]), agent.network_params) for s in range(mdp.n_states)])
-            # print()
-            # print(jnp.array(states))
-            # print(jnp.array(actions))
-            # print(jnp.array(next_states))
-            # print(jnp.array(terminals))
-            # print(jnp.array(rewards))
-            # print(jnp.array(next_actions))
-            # print()
-            # print(s_1)
-            # q_s0 = agent.Qs(jnp.array(states), agent.network_params)
-            # q_s1 = agent.Qs(jnp.array(next_states), agent.network_params)
-      
-
-            # td_err = agent.batch_error_fn(q_s0, jnp.array(actions), jnp.array(rewards), jnp.where(jnp.array(terminals), 0., mdp.gamma), q_s1, jnp.array(next_actions))
             
             loss = agent.update(batch)
             s_0_processed = s_1_processed
