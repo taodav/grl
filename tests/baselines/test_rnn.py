@@ -51,6 +51,6 @@ def test_lstm_chain_mdp():
           f"Ground-truth values: {ground_truth_vals}")
     assert jnp.all(jnp.isclose(v[0][:-1], ground_truth_vals, atol=1e-2))
 
-    if __name__ == "__main__":
-        test_lstm_chain_mdp()
+if __name__ == "__main__":
+    test_lstm_chain_mdp()
 

@@ -632,6 +632,14 @@ def simple_chain(n: int = 10):
 
     return to_dict(T, R, 0.9, p0, phi, Pi_phi)
 
+def po_simple_chain(n: int = 10):
+    spec = simple_chain(n)
+    phi = np.ones((n, 1))
+    Pi_phi = [np.ones((1, 1))]
+    spec['phi'] = phi
+    spec['Pi_phi'] = Pi_phi
+    return spec
+
 def tmaze_hyperparams(corridor_length: int = 5,
                       discount: float = 0.9,
                       junction_up_pi: float = 2 / 3,

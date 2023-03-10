@@ -220,13 +220,12 @@ def train_rnn_agent(mdp: MDP,
                              terminals=[terminals], 
                              rewards=[rewards], 
                              next_actions=[next_actions])
-        print(batch)
-        loss = agent.update(batch) 
+        loss = agent.update(batch)
            
 
 
-        if num_eps % 1000 == 0:
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss}")                  
+        if num_eps % 100 == 0:
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
         
         num_eps = num_eps + 1
 
