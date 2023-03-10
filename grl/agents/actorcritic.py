@@ -1,8 +1,8 @@
 import copy
-from functools import partial
-from itertools import repeat
 from multiprocessing import Pool, freeze_support
 import os
+from pathlib import Path
+import pickle
 import shutil
 from typing import Union
 import warnings
@@ -66,6 +66,14 @@ class ActorCritic:
         self.replay = ReplayMemory(capacity=replay_buffer_size,
                                    on_retrieve={'*': lambda x: np.asarray(x)})
         self.reset_memory_state()
+    def save(self, file_path: Union[str, Path]):
+        with open(file_path, 'wb') as fp:
+            pickle.dump(self, fp)
+
+    @classmethod
+    def load(self, file_path: Union[str, Path]):
+        with open(file_path, 'rb') as fp:
+            return pickle.load(fp)
 
     def mem_summary(self, precision=3):
         mem = self.memory_probs.round(precision)
@@ -292,11 +300,15 @@ class ActorCritic:
             return observed_lambda_discrepancies.mean()
         else:
             obs_counts = one_hot(obs_aug, self.n_obs * self.n_mem_states).sum(axis=0)
-            obs_freq = obs_counts / obs_counts.sum()
+            obs_freq = obs_counts / obs_counts.sum() # WIP: this is correct, this onwards?
             n_unique_obs = (obs_counts > 0).sum()
-            importance_weights = (1 / n_unique_obs) / (obs_freq + 1e-12) * (obs_counts > 0)
+            importance_weights = ((1 / n_unique_obs) / (obs_freq + 1e-12)) * (obs_counts > 0)
             observed_lambda_discreps = discrepancies[actions, obs_aug]
             weighted_discreps = observed_lambda_discreps * importance_weights[obs_aug]
+
+            count_mask = (obs_freq > 0).astype(float)
+            uniform_o = (np.ones(self.policy_probs.shape[0]) / count_mask.sum()) * count_mask
+            analytical_weight = (self.policy_probs * uniform_o[:, None]).T
             return weighted_discreps.mean()
 
     def evaluate_memory(self):

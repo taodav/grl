@@ -85,7 +85,9 @@ class ReplayMemory:
         for key in state['on_retrieve']:
             new_lambda_code = marshal.loads(state['on_retrieve'][key])
             state['on_retrieve'][key] = types.FunctionType(new_lambda_code, globals())
-        state['on_retrieve'] = defaultdict(**state['on_retrieve'])
+        new_default_dict = defaultdict(lambda: (lambda items: items))
+        new_default_dict.update(state['on_retrieve'])
+        state['on_retrieve'] = new_default_dict
         self.__dict__.update(state)
 
     def _extract_array(self, experiences, key):

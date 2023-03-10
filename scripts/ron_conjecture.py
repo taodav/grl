@@ -3,6 +3,7 @@ import numpy as np
 from grl.environment import load_spec
 
 if __name__ == "__main__":
+    # TODO: refactor all of this!
     spec_name = 'tmaze_5_two_thirds_up'
     lamb = 0
 
@@ -26,7 +27,6 @@ if __name__ == "__main__":
 
     I = np.eye(n)
 
-    # TODO: this is functional_get_occupancy
     mu = np.linalg.inv(I-gamma*P.T) @ s0
     mu = mu/np.sum(mu)
 

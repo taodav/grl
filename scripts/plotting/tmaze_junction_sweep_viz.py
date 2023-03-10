@@ -213,7 +213,8 @@ plt.rcParams.update({'font.size': 14})
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 plot_sweep(planning_data, ax=axes[0], title='Planning Agent', add_colorbar=False)
-axes[0].set_xlim(0,0.5)
+planning_data[planning_data['policy_up_prob'] == 0]
+# axes[0].set_xlim(0,0.5)
 plot_sweep(learning_data, ax=axes[1], title='Learning Agent', add_colorbar=True)
 # learning_data[learning_data['policy_up_prob'] == 0]
 
@@ -238,9 +239,10 @@ sns.lineplot(data=planning_data, ax=ax, x='policy_epsilon', y='final_discrep', c
 sns.lineplot(data=learning_data, ax=ax, x='policy_epsilon', y='final_discrep', color='black', linestyle='--', label='Final, Learning')
 
 #%%
-planning_data = load_analytical_results('results/analytical/tmaze_sweep_junction_pi_2022-02-17')
+
+planning_data = load_analytical_results(str(Path(ROOT_DIR, 'results', 'tmaze_sweep_junction_pi_uniform')))
 learning_data = load_sampled_results(
-    'results/sample_based/junction-sweep-up-prob-5/tmaze_5_two_thirds_up/*')
+    str(Path(ROOT_DIR, 'results', 'sweep-up-prob-imp-samp-7', 'tmaze_5_two_thirds_up/*')))
 
 fig, ax = plt.subplots()
 plt.plot()
