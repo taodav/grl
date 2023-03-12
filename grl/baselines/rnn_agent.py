@@ -5,6 +5,7 @@ Also based on David Tao's implementation at https://github.com/taodav/uncertaint
 """
 import jax
 import jax.numpy as jnp
+import numpy as np
 import haiku as hk
 import optax
 from functools import partial
@@ -171,42 +172,25 @@ def train_rnn_agent(mdp: MDP,
         # truncation buffers
         obs, actions, next_obs, terminals, rewards, next_actions = [], [], [], [], [], []
         o_0, _ = mdp.reset()
-        o_0_processed = jnp.array(one_hot(o_0, mdp.n_obs))
+        o_0_processed = one_hot(o_0, mdp.n_obs)
         obs.append(o_0_processed)
         
         for t in range(agent.trunc_len):
-            a_0 = int(agent.act(jnp.array(obs))[-1])
+            a_0 = agent.act(np.array(obs))[-1]
             actions.append(a_0)
             o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
             terminals.append(done)
             rewards.append(r_0)
             steps = steps + 1  
             
-            o_1_processed = jnp.array(one_hot(o_1, mdp.n_obs)) 
+            o_1_processed = one_hot(o_1, mdp.n_obs)
             next_obs.append(o_1_processed)
 
-            a_1 = int(agent.act(jnp.array(next_obs))[-1])
+            a_1 = agent.act(np.array(next_obs))[-1]
             next_actions.append(a_1)
             
             if done:
                 break
-            
-
-            #print([agent.Qs(jnp.array([s]), agent.network_params) for s in range(mdp.n_states)])
-            # print()
-            # print(jnp.array(states))
-            # print(jnp.array(actions))
-            # print(jnp.array(next_states))
-            # print(jnp.array(terminals))
-            # print(jnp.array(rewards))
-            # print(jnp.array(next_actions))
-            # print()
-            # print(s_1)
-            # q_s0 = agent.Qs(jnp.array(states), agent.network_params)
-            # q_s1 = agent.Qs(jnp.array(next_states), agent.network_params)
-      
-
-            # td_err = agent.batch_error_fn(q_s0, jnp.array(actions), jnp.array(rewards), jnp.where(jnp.array(terminals), 0., mdp.gamma), q_s1, jnp.array(next_actions))
             
             
             
@@ -224,7 +208,7 @@ def train_rnn_agent(mdp: MDP,
            
 
 
-        if num_eps % 100 == 0:
+        if num_eps % 1000 == 0:
             print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
         
         num_eps = num_eps + 1

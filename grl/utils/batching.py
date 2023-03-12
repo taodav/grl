@@ -1,4 +1,4 @@
-import jax.numpy as jnp
+import numpy as np
 from jax.tree_util import register_pytree_node_class
 from typing import Union
 
@@ -10,24 +10,24 @@ class JaxBatch:
     and convert into JAX representation internally.
     """
     def __init__(self, 
-                 obs: Union[jnp.ndarray, list[jnp.ndarray]] = [],
-                 actions: Union[jnp.ndarray, list[int]] = [],
-                 next_obs: Union[jnp.ndarray, list[jnp.ndarray]] = [],
-                 terminals: Union[jnp.ndarray, list[bool]] = [],
-                 rewards: Union[jnp.ndarray, list[float]] = [],
-                 next_actions: Union[jnp.ndarray, list[int]] = []) -> None:
+                 obs: Union[np.ndarray, list[np.ndarray]] = [],
+                 actions: Union[np.ndarray, list[int]] = [],
+                 next_obs: Union[np.ndarray, list[np.ndarray]] = [],
+                 terminals: Union[np.ndarray, list[bool]] = [],
+                 rewards: Union[np.ndarray, list[float]] = [],
+                 next_actions: Union[np.ndarray, list[int]] = []) -> None:
         # (b x num_observations)
-        self.obs = jnp.array(obs)
+        self.obs = np.array(obs)
         # (b x 1)
-        self.actions = jnp.array(actions, dtype=jnp.int32)
+        self.actions = np.array(actions, dtype=np.int32)
         # (b x num_observations)
-        self.next_obs = jnp.array(next_obs)
+        self.next_obs = np.array(next_obs)
         # (b x 1)
-        self.terminals = jnp.array(terminals)
+        self.terminals = np.array(terminals)
         # (b x 1)
-        self.rewards = jnp.array(rewards)
+        self.rewards = np.array(rewards)
         # (b x 1)
-        self.next_actions = jnp.array(next_actions, dtype=jnp.int32)
+        self.next_actions = np.array(next_actions, dtype=np.int32)
 
     def tree_flatten(self):
         children = (self.obs, self.actions, self.next_obs, self.terminals, self.rewards, self.next_actions)

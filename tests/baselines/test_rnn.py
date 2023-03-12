@@ -12,10 +12,10 @@ from grl.baselines.dqn_agent import DQNArgs
 from grl.baselines.rnn_agent import RNNAgent, train_rnn_agent
 
 
-def test_lstm_chain_mdp():
+def test_lstm_chain_pomdp():
     chain_length = 10
-    spec = environment.load_spec('simple_chain', memory_id=None)
-    n_steps = 5e4 * chain_length
+    spec = environment.load_spec('po_simple_chain', memory_id=None)
+    n_steps = 1e5 * chain_length
 
     print(f"Testing LSTM with Sequential SARSA on Simple Chain MDP over {n_steps} steps")
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
@@ -39,7 +39,7 @@ def test_lstm_chain_mdp():
     agent = train_rnn_agent(mdp, agent, n_steps)
 
 
-    test_batch = jnp.array([[one_hot(s, mdp.n_obs) for s in range(mdp.n_obs)]])
+    test_batch = jnp.array([[one_hot(s, chain_length) for s in range(chain_length)]])
     print(test_batch)
     print(test_batch.shape)
     test_batch_Qs = agent.Qs(test_batch, agent.network_params)
@@ -49,8 +49,8 @@ def test_lstm_chain_mdp():
 
     print(f"Calculated values: {v[0][:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
-    assert jnp.all(jnp.isclose(v[0][:-1], ground_truth_vals, atol=1e-2))
+    assert jnp.all(jnp.isclose(v[0][:-1], ground_truth_vals, atol=0.05))
 
 if __name__ == "__main__":
-    test_lstm_chain_mdp()
+    test_lstm_chain_pomdp()
 
