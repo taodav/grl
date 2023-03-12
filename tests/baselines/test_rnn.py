@@ -15,7 +15,7 @@ from grl.baselines.rnn_agent import RNNAgent, train_rnn_agent
 def test_lstm_chain_pomdp():
     chain_length = 10
     spec = environment.load_spec('po_simple_chain', memory_id=None)
-    n_steps = 1e5 * chain_length
+    n_steps = 5e4 * chain_length
 
     print(f"Testing LSTM with Sequential SARSA on Simple Chain MDP over {n_steps} steps")
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
@@ -26,7 +26,7 @@ def test_lstm_chain_pomdp():
         """Unroll an LSTM over sequences of [B, T, F]"""
         lstm = hk.LSTM(1)
         batch_size = x.shape[0]
-        outputs, cell_state = hk.dynamic_unroll(lstm, x, lstm.initial_state(batch_size), time_major=False)
+        outputs, cell_state = hk.static_unroll(lstm, x, lstm.initial_state(batch_size), time_major=False)
         return hk.BatchApply(hk.Linear(mdp.n_actions))(outputs), cell_state
     
     transformed = hk.without_apply_rng(hk.transform(_lstm_func))
@@ -40,12 +40,7 @@ def test_lstm_chain_pomdp():
 
 
     test_batch = jnp.array([[one_hot(s, chain_length) for s in range(chain_length)]])
-    print(test_batch)
-    print(test_batch.shape)
-    test_batch_Qs = agent.Qs(test_batch, agent.network_params)
-    print(test_batch_Qs)
     v = jnp.sum(agent.Qs(test_batch, agent.network_params), axis=-1)
-    print(v)
 
     print(f"Calculated values: {v[0][:-1]}\n"
           f"Ground-truth values: {ground_truth_vals}")
