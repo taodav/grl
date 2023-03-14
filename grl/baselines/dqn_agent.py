@@ -4,6 +4,7 @@ Based off of David Tao's implementation at https://github.com/taodav/uncertainty
 """
 import jax
 import jax.numpy as jnp
+import numpy as np
 import haiku as hk
 import optax
 from functools import partial
@@ -100,10 +101,17 @@ class DQNAgent:
         Get next epsilon-greedy action given a state, using the agent's parameters.
         :param state: (*state.shape) (batch of) state(s) to find actions for.
         """
-        policy, _ = self.policy(state)
-        self._rand_key, subkey = random.split(self._rand_key)
-        action = random.choice(subkey, jnp.arange(self.n_actions), p=policy, shape=(state.shape[0],))
+        action, self._rand_key = self._functional_act(state, self._rand_key, self.network_params)        
         return action
+    
+    @partial(jit, static_argnums=0)
+    def _functional_act(self, state, rand_key, network_params):
+       # expand obervation dim to include batch dim
+       # TODO maybe we should be doing this in the training loop?
+       policy, _ = self._functional_policy(state, network_params)
+       key, subkey = random.split(rand_key)
+       action = random.choice(subkey, jnp.arange(self.n_actions), p=policy, shape=(state.shape[0],))
+       return action, key
 
     def policy(self, state: jnp.ndarray):
         """
@@ -196,7 +204,7 @@ def train_dqn_agent(mdp: MDP,
     :param agent: DQNAgent to train.
     :param total_steps: Number of steps to train for.
     """
-
+    jit_onehot = jax.jit(one_hot, static_argnames=["n"])
     steps = 0
     num_eps = 0
     # Not really batching just updating at each step
@@ -204,13 +212,13 @@ def train_dqn_agent(mdp: MDP,
     while (steps < total_steps):
         done = False
         s_0, _ = mdp.reset()
-        s_0_processed = jnp.array([one_hot(s_0, mdp.n_obs)])
-        a_0 = int(agent.act(s_0_processed))
+        s_0_processed = np.array([jit_onehot(s_0, mdp.n_obs)])
+        a_0 = agent.act(s_0_processed)[0]
         while not done:
             s_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
 
-            s_1_processed = jnp.array([one_hot(s_1, mdp.n_obs)])
-            a_1 = int(agent.act(s_1_processed))
+            s_1_processed = np.array([jit_onehot(s_1, mdp.n_obs)])
+            a_1 = agent.act(s_1_processed)[0]
 
             states.append(s_0_processed)
             actions.append(a_0)

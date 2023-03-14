@@ -65,12 +65,20 @@ class RNNAgent(DQNAgent):
         :param obs: (batch x obs_size) obs(s) to find actions for. 
         """
         # expand dimensions to include timesteps
-        # TODO differing from david here?
-        obs = jnp.expand_dims(obs, 0)
-        policy, _ = self.policy(obs)
-        self._rand_key, subkey = random.split(self._rand_key)
-        action = random.choice(subkey, jnp.arange(self.n_actions), p=policy, shape=(obs.shape[1],))
+        
+        action, self._rand_key = self._functional_act(obs, self._rand_key, self.network_params)        
+        
         return action
+    
+    @partial(jit, static_argnums=0)
+    def _functional_act(self, obs, rand_key, network_params):
+       # expand obervation dim to include batch dim
+       # TODO maybe we should be doing this in the training loop?
+       obs = jnp.expand_dims(obs, 0)
+       policy, _ = self._functional_policy(obs, network_params)
+       key, subkey = random.split(rand_key)
+       action = random.choice(subkey, jnp.arange(self.n_actions), p=policy, shape=(obs.shape[1],))
+       return action, key
 
     def policy(self, obs: jnp.ndarray):
         """
@@ -167,12 +175,14 @@ def train_rnn_agent(mdp: MDP,
 
     steps = 0
     num_eps = 0
+
+    jit_onehot = jax.jit(one_hot, static_argnames=["n"])
     
     while (steps < total_steps):
         # truncation buffers
         obs, actions, next_obs, terminals, rewards, next_actions = [], [], [], [], [], []
         o_0, _ = mdp.reset()
-        o_0_processed = one_hot(o_0, mdp.n_obs)
+        o_0_processed = jit_onehot(o_0, mdp.n_obs)
         obs.append(o_0_processed)
         
         for t in range(agent.trunc_len):
@@ -183,7 +193,7 @@ def train_rnn_agent(mdp: MDP,
             rewards.append(r_0)
             steps = steps + 1  
             
-            o_1_processed = one_hot(o_1, mdp.n_obs)
+            o_1_processed = jit_onehot(o_1, mdp.n_obs)
             next_obs.append(o_1_processed)
 
             a_1 = agent.act(np.array(next_obs))[-1]
