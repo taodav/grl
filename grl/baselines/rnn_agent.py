@@ -187,6 +187,7 @@ def train_rnn_agent(mdp: MDP,
     if zero_obs:
         jit_onehot = jax.jit(lambda x, y: jnp.zeros((mdp.n_obs,)))
     
+    avg_rewards = []
     while (steps < total_steps):
         # truncation buffers
         obs, actions, next_obs, terminals, rewards, next_actions = [], [], [], [], [], []
@@ -226,6 +227,7 @@ def train_rnn_agent(mdp: MDP,
                              terminals=[terminals], 
                              rewards=[rewards], 
                              next_actions=[next_actions])
+        avg_rewards.append(np.average(rewards))
         if len(batch.obs[0]) > agent.trunc_len:
             print(f"Batch length was {len(batch.obs[0])}")
             print(batch)
@@ -233,7 +235,9 @@ def train_rnn_agent(mdp: MDP,
         loss = agent.update(batch)
            
         if num_eps % 1000 == 0:
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
+            avg_reward = np.average(np.array(avg_rewards))
+            avg_rewards = []
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {avg_reward} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
         
         num_eps = num_eps + 1
 
