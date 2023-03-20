@@ -4,6 +4,8 @@ Relies on haiku's recurrent API (https://dm-haiku.readthedocs.io/en/latest/api.h
 Also based on David Tao's implementation at https://github.com/taodav/uncertainty/blob/main/unc/agents/lstm.py .
 """
 import jax
+# from jax.config import config
+# config.update('jax_disable_jit', True)
 import jax.numpy as jnp
 import numpy as np
 import haiku as hk
@@ -24,7 +26,11 @@ def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarr
     First axis of all tensors are the sequence length.
     :return:
     """
+    # print(a.shape)
     target = r + g * q1[jnp.arange(next_a.shape[0]), next_a]
+    # print('r', r)
+    # print('g', g)
+    # print('target', target)
     target = jax.lax.stop_gradient(target)
     q_vals = q[jnp.arange(a.shape[0]), a]
     return q_vals - target
@@ -165,7 +171,8 @@ class RNNAgent(DQNAgent):
     
 def train_rnn_agent(mdp: MDP,
                     agent: DQNAgent,
-                    total_steps: int):
+                    total_steps: int,
+                    zero_obs = False):
     """
     Training loop for a dqn agent.
     :param mdp: mdp to train on. Currently DQN does not support AMDPs.
@@ -177,16 +184,19 @@ def train_rnn_agent(mdp: MDP,
     num_eps = 0
 
     jit_onehot = jax.jit(one_hot, static_argnames=["n"])
+    if zero_obs:
+        jit_onehot = jax.jit(lambda x, y: jnp.zeros((mdp.n_obs,)))
     
     while (steps < total_steps):
         # truncation buffers
         obs, actions, next_obs, terminals, rewards, next_actions = [], [], [], [], [], []
         o_0, _ = mdp.reset()
         o_0_processed = jit_onehot(o_0, mdp.n_obs)
-        obs.append(o_0_processed)
+        
+        a_0 = agent.act(np.array([o_0_processed]))[-1]
         
         for t in range(agent.trunc_len):
-            a_0 = agent.act(np.array(obs))[-1]
+            obs.append(o_0_processed)
             actions.append(a_0)
             o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
             terminals.append(done)
@@ -200,26 +210,30 @@ def train_rnn_agent(mdp: MDP,
             next_actions.append(a_1)
             
             if done:
+                #print(f"Broke early after {t} steps")
                 break
             
             
             
             o_0_processed = o_1_processed
-            obs.append(o_0_processed)
+            a_0 = a_1
             
-        
+            
+       
         batch = JaxBatch(obs=[obs], 
                              actions=[actions], 
                              next_obs=[next_obs], 
                              terminals=[terminals], 
                              rewards=[rewards], 
                              next_actions=[next_actions])
+        if len(batch.obs[0]) > agent.trunc_len:
+            print(f"Batch length was {len(batch.obs[0])}")
+            print(batch)
+            raise ValueError
         loss = agent.update(batch)
            
-
-
         if num_eps % 1000 == 0:
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
         
         num_eps = num_eps + 1
 
