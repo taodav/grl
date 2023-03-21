@@ -103,7 +103,11 @@ class AnalyticalAgent:
     @property
     def policy(self) -> jnp.ndarray:
         # return the learnt policy
-        return softmax(self.pi_params, axis=-1)
+        greedy_policy = softmax(self.pi_params, axis=-1)
+        # eps = 0.1
+        # non_greedy_policy = greedy_policy * (1 - eps)
+        # return non_greedy_policy + (eps / self.pi_params.shape[-1])
+        return greedy_policy
 
     @property
     def memory(self) -> jnp.ndarray:
