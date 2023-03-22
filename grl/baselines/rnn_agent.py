@@ -151,6 +151,7 @@ class RNNAgent(DQNAgent):
                           batch: JaxBatch
                           ) -> Tuple[float, hk.Params, hk.State]:
         loss, grad = jax.value_and_grad(self._loss)(network_params, batch)
+        print(loss)
         updates, optimizer_state = self.optimizer.update(grad, optimizer_state, network_params)
         network_params = optax.apply_updates(network_params, updates)
 
@@ -191,12 +192,14 @@ def train_rnn_agent(mdp: MDP,
     while (steps < total_steps):
         # truncation buffers
         obs, actions, next_obs, terminals, rewards, next_actions = [], [], [], [], [], []
+        done = False
         o_0, _ = mdp.reset()
         o_0_processed = jit_onehot(o_0, mdp.n_obs)
-        
         a_0 = agent.act(np.array([o_0_processed]))[-1]
         
-        for t in range(agent.trunc_len):
+        # TODO: removing the trunc len for T-maze
+        # to see what happens
+        while not done:
             obs.append(o_0_processed)
             actions.append(a_0)
             o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
@@ -217,8 +220,7 @@ def train_rnn_agent(mdp: MDP,
             
             
             o_0_processed = o_1_processed
-            a_0 = a_1
-            
+            a_0 = a_1            
             
        
         batch = JaxBatch(obs=[obs], 
@@ -227,11 +229,17 @@ def train_rnn_agent(mdp: MDP,
                              terminals=[terminals], 
                              rewards=[rewards], 
                              next_actions=[next_actions])
+        if len(actions) > agent.trunc_len:
+            print(f"Episode length {len(actions)} was longer than truncation len {agent.trunc_len}")
         avg_rewards.append(np.average(rewards))
-        if len(batch.obs[0]) > agent.trunc_len:
-            print(f"Batch length was {len(batch.obs[0])}")
+        batch_nonzero_rewards = np.fromiter((x for x in rewards if x != 0), dtype=np.float32)
+        if avg_rewards[-1] != 0:
+            print(batch_nonzero_rewards)
+        if len(batch_nonzero_rewards) == 1 and num_eps > total_steps / 100:
+            print(f"Number of nonzero rewards was {len(batch_nonzero_rewards)}")
             print(batch)
-            raise ValueError
+            print(agent.Qs(batch.obs, agent.network_params))
+            #raise ValueError
         loss = agent.update(batch)
            
         if num_eps % 1000 == 0:

@@ -43,7 +43,13 @@ def test_lstm_chain_pomdp():
 
     rand_key = random.PRNGKey(2023)
     rand_key, subkey = random.split(rand_key)
-    agent_args = DQNArgs((pomdp.n_obs,), pomdp.n_actions, pomdp.gamma, subkey, algo = "sarsa", trunc_len=chain_length, alpha=0.01)
+    agent_args = DQNArgs((pomdp.n_obs,), 
+                         pomdp.n_actions, 
+                         pomdp.gamma, 
+                         subkey, 
+                         algo = "sarsa", 
+                         trunc_len=chain_length, 
+                         alpha=0.01)
     agent = RNNAgent(transformed, agent_args)
 
     agent = train_rnn_agent(pomdp, agent, n_steps, zero_obs=False)
@@ -69,7 +75,7 @@ def test_lstm_5len_tmaze():
     spec = environment.load_spec("tmaze_5_two_thirds_up")
     trunc_len = 10
 
-    n_steps = 1e6
+    n_steps = 1e7
 
     print(f"Testing LSTM with Sequential SARSA on 5-length T-maze over {n_steps} steps with trunc length {trunc_len}")
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
@@ -84,7 +90,7 @@ def test_lstm_5len_tmaze():
         """Unroll an LSTM over sequences of [B, T, F]"""
         init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
         b_init = hk.initializers.Constant(0)
-        lstm = hk.GRU(10, w_i_init=init, 
+        lstm = hk.LSTM(12, w_i_init=init, 
                         w_h_init=init, 
                         b_init=b_init)
         batch_size = x.shape[0]
@@ -98,7 +104,7 @@ def test_lstm_5len_tmaze():
 
     rand_key = random.PRNGKey(2023)
     rand_key, subkey = random.split(rand_key)
-    agent_args = DQNArgs((pomdp.n_obs,), pomdp.n_actions, pomdp.gamma, subkey, algo = "sarsa", trunc_len=trunc_len)
+    agent_args = DQNArgs((pomdp.n_obs,), pomdp.n_actions, pomdp.gamma, subkey, algo = "sarsa", trunc_len=trunc_len, alpha=0.001)
     agent = RNNAgent(transformed, agent_args)
 
     agent = train_rnn_agent(pomdp, agent, n_steps)
