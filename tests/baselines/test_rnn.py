@@ -13,6 +13,26 @@ from grl.baselines.dqn_agent import DQNArgs
 from grl.baselines.rnn_agent import RNNAgent, train_rnn_agent
 
 
+class SimpleGRU(hk.Module):
+    def __init__(self, hidden_size, output_size, name='basic_gru'):
+        super().__init__(name=name)
+        init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
+        b_init = hk.initializers.Constant(0)
+        self._lstm = hk.GRU(hidden_size, w_i_init=init, 
+                        w_h_init=init, 
+                        b_init=b_init)
+        
+        self._linear = hk.Linear(output_size, w_init=init, b_init = b_init)
+        
+
+    def __call__(self, x):
+        batch_size = x.shape[0]
+        initial_state = self._lstm.initial_state(batch_size)
+        # initial_state = jnp.zeros(initial_state.shape)
+        outputs, cell_state = hk.dynamic_unroll(self._lstm, x, initial_state, time_major=False)
+        return hk.BatchApply(self._linear)(outputs), cell_state
+
+
 def test_lstm_chain_pomdp():
     chain_length = 10
     spec = environment.load_spec('po_simple_chain', memory_id=None)
@@ -26,18 +46,8 @@ def test_lstm_chain_pomdp():
     ground_truth_vals = spec['gamma']**jnp.arange(chain_length - 2, -1, -1)
 
     def _lstm_func(x: jnp.ndarray):
-        """Unroll an LSTM over sequences of [B, T, F]"""
-        init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
-        b_init = hk.initializers.Constant(0)
-        lstm = hk.GRU(1, w_i_init=init, 
-                        w_h_init=init, 
-                        b_init=b_init)
-        batch_size = x.shape[0]
-        initial_state = lstm.initial_state(batch_size)
-        initial_state = jnp.zeros(initial_state.shape)
-        outputs, cell_state = hk.dynamic_unroll(lstm, x, initial_state, time_major=False)
-        linear = hk.Linear(pomdp.n_actions, w_init=init, b_init = b_init)
-        return hk.BatchApply(linear)(outputs), cell_state
+        module = SimpleGRU(1, pomdp.n_actions)
+        return module(x)
     
     transformed = hk.without_apply_rng(hk.transform(_lstm_func))
 
@@ -87,18 +97,8 @@ def test_lstm_5len_tmaze():
     #ground_truth_vals = spec['gamma']**jnp.arange(chain_length - 2, -1, -1)
 
     def _lstm_func(x: jnp.ndarray):
-        """Unroll an LSTM over sequences of [B, T, F]"""
-        init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
-        b_init = hk.initializers.Constant(0)
-        lstm = hk.LSTM(12, w_i_init=init, 
-                        w_h_init=init, 
-                        b_init=b_init)
-        batch_size = x.shape[0]
-        initial_state = lstm.initial_state(batch_size)
-        #initial_state = jnp.zeros(initial_state.shape)
-        outputs, cell_state = hk.dynamic_unroll(lstm, x, initial_state, time_major=False)
-        linear = hk.Linear(pomdp.n_actions, w_init=init, b_init = b_init)
-        return hk.BatchApply(linear)(outputs), cell_state
+        module = SimpleGRU(12, pomdp.n_actions)
+        return module(x)
     
     transformed = hk.without_apply_rng(hk.transform(_lstm_func))
 
@@ -119,6 +119,6 @@ def test_lstm_5len_tmaze():
     # assert jnp.all(jnp.isclose(v[0][:-1], ground_truth_vals, atol=0.05))
 
 if __name__ == "__main__":
-    #test_lstm_chain_pomdp()
-    test_lstm_5len_tmaze()
+    test_lstm_chain_pomdp()
+    #test_lstm_5len_tmaze()
 

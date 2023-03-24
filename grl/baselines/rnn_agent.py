@@ -68,10 +68,8 @@ class RNNAgent(DQNAgent):
     def act(self, obs: jnp.ndarray) -> jnp.ndarray:
         """
         Get next epsilon-greedy action given a obs, using the agent's parameters.
-        :param obs: (batch x obs_size) obs(s) to find actions for. 
-        """
-        # expand dimensions to include timesteps
-        
+        :param obs: (batch x obs_size) obs to find actions for. 
+        """        
         action, self._rand_key = self._functional_act(obs, self._rand_key, self.network_params)        
         
         return action
@@ -80,10 +78,22 @@ class RNNAgent(DQNAgent):
     def _functional_act(self, obs, rand_key, network_params):
        # expand obervation dim to include batch dim
        # TODO maybe we should be doing this in the training loop?
-       obs = jnp.expand_dims(obs, 0)
-       policy, _ = self._functional_policy(obs, network_params)
+       exp_obs = jnp.expand_dims(obs, 0)
+       policy, _ = self._functional_policy(exp_obs, network_params)
        key, subkey = random.split(rand_key)
-       action = random.choice(subkey, jnp.arange(self.n_actions), p=policy, shape=(obs.shape[1],))
+       #action_choices = jnp.full((*exp_obs.shape[:-1], self.n_actions), jnp.arange(self.n_actions))
+    #    print(action_choices.shape)
+    #    print(policy.shape)
+       # TODO is there a better way? for some reason the following doesn't work
+       # action = random.choice(key=subkey, a=action_choices, p=policy, axis=-1, shape=(*exp_obs.shape[:-1], 1))
+       
+       action = jnp.array([[]], dtype=jnp.int32)
+       for batch in range(policy.shape[0]):
+            actions_ts = []
+            for ts in range(policy.shape[1]):
+                key, subkey = random.split(key)
+                actions_ts.append(random.choice(key=subkey, a = jnp.arange(self.n_actions), p=policy[batch][ts]))
+            action = jnp.append(action, jnp.array([actions_ts]), axis=-1)
        return action, key
 
     def policy(self, obs: jnp.ndarray):
@@ -95,9 +105,13 @@ class RNNAgent(DQNAgent):
 
     @partial(jit, static_argnums=0)
     def _functional_policy(self, obs: jnp.ndarray, network_params: hk.Params) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        probs = jnp.zeros(self.n_actions) + self.eps / self.n_actions
+        probs = jnp.zeros((*obs.shape[:-1], self.n_actions)) + self.eps / self.n_actions
         greedy_idx, qs = self._greedy_act(obs, network_params)
-        probs = probs.at[greedy_idx].add(1 - self.eps)
+        # TODO I genuinely don't know a better way to do this atm, 
+        # but hopefully this shouldn't add much overhead?
+        for batch in range(probs.shape[0]):
+            for ts in range(probs.shape[1]):
+                probs = probs.at[(batch, ts, greedy_idx[batch][ts])].add(1 - self.eps)
         return probs, qs
 
 
@@ -110,7 +124,7 @@ class RNNAgent(DQNAgent):
         :return: (b x time_steps) Greedy actions
         """
         qs = self.Qs(obs, network_params)
-        return jnp.argmax(qs, axis=2), qs
+        return jnp.argmax(qs, -1), qs
 
     
     def Qs(self, obs: jnp.ndarray, network_params: hk.Params) -> jnp.ndarray:
@@ -151,7 +165,6 @@ class RNNAgent(DQNAgent):
                           batch: JaxBatch
                           ) -> Tuple[float, hk.Params, hk.State]:
         loss, grad = jax.value_and_grad(self._loss)(network_params, batch)
-        print(loss)
         updates, optimizer_state = self.optimizer.update(grad, optimizer_state, network_params)
         network_params = optax.apply_updates(network_params, updates)
 
@@ -195,12 +208,11 @@ def train_rnn_agent(mdp: MDP,
         done = False
         o_0, _ = mdp.reset()
         o_0_processed = jit_onehot(o_0, mdp.n_obs)
-        a_0 = agent.act(np.array([o_0_processed]))[-1]
+        a_0 = agent.act(np.array([o_0_processed]))[-1][-1]
         
-        # TODO: removing the trunc len for T-maze
-        # to see what happens
-        while not done:
+        for _ in range(agent.trunc_len):
             obs.append(o_0_processed)
+            
             actions.append(a_0)
             o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
             terminals.append(done)
@@ -210,7 +222,7 @@ def train_rnn_agent(mdp: MDP,
             o_1_processed = jit_onehot(o_1, mdp.n_obs)
             next_obs.append(o_1_processed)
 
-            a_1 = agent.act(np.array(next_obs))[-1]
+            a_1 = agent.act(np.array(obs + [o_1_processed]))[-1][-1]
             next_actions.append(a_1)
             
             if done:
@@ -220,7 +232,7 @@ def train_rnn_agent(mdp: MDP,
             
             
             o_0_processed = o_1_processed
-            a_0 = a_1            
+            a_0 = a_1
             
        
         batch = JaxBatch(obs=[obs], 
@@ -230,11 +242,11 @@ def train_rnn_agent(mdp: MDP,
                              rewards=[rewards], 
                              next_actions=[next_actions])
         if len(actions) > agent.trunc_len:
-            print(f"Episode length {len(actions)} was longer than truncation len {agent.trunc_len}")
+            print(f"Episode length {len(actions)} was longer than truncation len {agent}")
         avg_rewards.append(np.average(rewards))
         batch_nonzero_rewards = np.fromiter((x for x in rewards if x != 0), dtype=np.float32)
-        if avg_rewards[-1] != 0:
-            print(batch_nonzero_rewards)
+        # if avg_rewards[-1] != 0:
+        #     print(batch_nonzero_rewards)
         if len(batch_nonzero_rewards) == 1 and num_eps > total_steps / 100:
             print(f"Number of nonzero rewards was {len(batch_nonzero_rewards)}")
             print(batch)
@@ -243,11 +255,19 @@ def train_rnn_agent(mdp: MDP,
         loss = agent.update(batch)
            
         if num_eps % 1000 == 0:
+            rewards_good = [x for x in avg_rewards if x > 0]
+            rewards_bad = [x for x in avg_rewards if x < 0]
+            pct_success = len(rewards_good) / len(avg_rewards)
+            pct_fail = len(rewards_bad) / len(avg_rewards)
+            pct_neutral = 1 - pct_success - pct_fail
             avg_reward = np.average(np.array(avg_rewards))
             avg_rewards = []
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {avg_reward} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {avg_reward} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
+            #print(f"Policy {agent.policy(batch.obs)}")
         
         num_eps = num_eps + 1
+        if num_eps >= 50000:
+            print("break")
 
     return agent
         
