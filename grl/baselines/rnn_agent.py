@@ -204,26 +204,27 @@ def train_rnn_agent(mdp: MDP,
     avg_rewards = []
     while (steps < total_steps):
         # truncation buffers
-        obs, actions, next_obs, terminals, rewards, next_actions = [], [], [], [], [], []
-        done = False
+        all_obs, all_actions, terminals, rewards = [], [], [], []
+        
         o_0, _ = mdp.reset()
         o_0_processed = jit_onehot(o_0, mdp.n_obs)
-        a_0 = agent.act(np.array([o_0_processed]))[-1][-1]
+        all_obs.append(o_0_processed)
+        
+        a_0 = agent.act(np.array(all_obs))[-1][-1]
+        all_actions.append(a_0)
         
         for _ in range(agent.trunc_len):
-            obs.append(o_0_processed)
             
-            actions.append(a_0)
             o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
             terminals.append(done)
             rewards.append(r_0)
             steps = steps + 1  
             
             o_1_processed = jit_onehot(o_1, mdp.n_obs)
-            next_obs.append(o_1_processed)
+            all_obs.append(o_1_processed)
 
-            a_1 = agent.act(np.array(obs + [o_1_processed]))[-1][-1]
-            next_actions.append(a_1)
+            a_1 = agent.act(np.array(all_obs))[-1][-1]
+            all_actions.append(a_1)
             
             if done:
                 #print(f"Broke early after {t} steps")
@@ -235,14 +236,16 @@ def train_rnn_agent(mdp: MDP,
             a_0 = a_1
             
        
-        batch = JaxBatch(obs=[obs], 
-                             actions=[actions], 
-                             next_obs=[next_obs], 
+        batch = JaxBatch(obs=[all_obs[:-1]], 
+                             actions=[all_actions[:-1]], 
+                             next_obs=[all_obs[1:]], 
                              terminals=[terminals], 
                              rewards=[rewards], 
-                             next_actions=[next_actions])
-        if len(actions) > agent.trunc_len:
-            print(f"Episode length {len(actions)} was longer than truncation len {agent}")
+                             next_actions=[all_actions[1:]])
+        
+        if len(all_actions[:-1]) > agent.trunc_len:
+            print(f"Episode length {len(all_actions[:-1])} was longer than truncation len {agent.trunc_len}")
+        
         avg_rewards.append(np.average(rewards))
         batch_nonzero_rewards = np.fromiter((x for x in rewards if x != 0), dtype=np.float32)
         # if avg_rewards[-1] != 0:
@@ -252,6 +255,7 @@ def train_rnn_agent(mdp: MDP,
             print(batch)
             print(agent.Qs(batch.obs, agent.network_params))
             #raise ValueError
+        
         loss = agent.update(batch)
            
         if num_eps % 1000 == 0:
@@ -262,12 +266,12 @@ def train_rnn_agent(mdp: MDP,
             pct_neutral = 1 - pct_success - pct_fail
             avg_reward = np.average(np.array(avg_rewards))
             avg_rewards = []
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {avg_reward} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
             #print(f"Policy {agent.policy(batch.obs)}")
         
         num_eps = num_eps + 1
-        if num_eps >= 50000:
-            print("break")
+        # if num_eps >= 50000:
+        #     print("break")
 
     return agent
         
