@@ -9,24 +9,23 @@ class JaxBatch:
     Meant to take in (one-hot encoded) states, actions, next_states, etc. directly from the MDP
     and convert into JAX representation internally.
     """
-    def __init__(self, 
+    def __init__(self,
+                 all_obs:  Union[np.ndarray, list[np.ndarray]] = [],
                  obs: Union[np.ndarray, list[np.ndarray]] = [],
                  actions: Union[np.ndarray, list[int]] = [],
                  next_obs: Union[np.ndarray, list[np.ndarray]] = [],
                  terminals: Union[np.ndarray, list[bool]] = [],
                  rewards: Union[np.ndarray, list[float]] = [],
                  next_actions: Union[np.ndarray, list[int]] = []) -> None:
-        args = [obs, actions, next_obs, terminals, rewards, next_actions]
-        tmap = set(map(lambda x: type(x), args))
-        assert len(tmap) == 1
-        if tmap.pop() == np.ndarray:
-            self.obs = obs
-            self.actions = actions
-            self.next_obs = next_obs
-            self.terminals = terminals
-            self.rewards = rewards
-            self.next_actions = next_actions
-        else:
+        args = [all_obs, obs, actions, next_obs, terminals, rewards, next_actions]
+        tlist = [type(x) for x in args]
+        tmap = set(tlist)
+        assert len(tmap) == 1, print(tlist)
+        input_type = tmap.pop()
+        
+        if input_type == list:
+            # (b+1 x num_observations)
+            self.all_obs = np.array(all_obs)
             # (b x num_observations)
             self.obs = np.array(obs)
             # (b x 1)
@@ -40,8 +39,17 @@ class JaxBatch:
             # (b x 1)
             self.next_actions = np.array(next_actions, dtype=np.int32)
 
+        else:
+            self.all_obs = all_obs
+            self.obs = obs
+            self.actions = actions
+            self.next_obs = next_obs
+            self.terminals = terminals
+            self.rewards = rewards
+            self.next_actions = next_actions
+
     def tree_flatten(self):
-        children = (self.obs, self.actions, self.next_obs, self.terminals, self.rewards, self.next_actions)
+        children = (self.all_obs, self.obs, self.actions, self.next_obs, self.terminals, self.rewards, self.next_actions)
         aux_data = None
         return (children, aux_data)
 

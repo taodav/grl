@@ -14,20 +14,7 @@ from typing import Tuple, Union
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
-from dataclasses import dataclass
-
-@dataclass
-class DQNArgs:
-    features_shape: Tuple[int]
-    n_actions: int
-    gamma: float
-    rand_key: random.PRNGKey
-    epsilon: float = 0.1
-    optimizer: str = "sgd"
-    alpha: float = 0.01
-    algo: str = "sarsa"
-    trunc_len: int = None
-
+from . import DQNArgs
 
 # Error functions from David's impl
 def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):

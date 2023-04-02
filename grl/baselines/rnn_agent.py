@@ -4,8 +4,8 @@ Relies on haiku's recurrent API (https://dm-haiku.readthedocs.io/en/latest/api.h
 Also based on David Tao's implementation at https://github.com/taodav/uncertainty/blob/main/unc/agents/lstm.py .
 """
 import jax
-from jax.config import config
-config.update('jax_disable_jit', True)
+# from jax.config import config
+# config.update('jax_disable_jit', True)
 import jax.numpy as jnp
 import numpy as np
 import haiku as hk
@@ -17,7 +17,8 @@ from typing import Tuple
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
-from .dqn_agent import DQNAgent, DQNArgs, mse
+from .dqn_agent import DQNAgent, mse
+from . import DQNArgs
 
 # error func from David's impl
 def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, next_a: jnp.ndarray):
@@ -36,8 +37,8 @@ def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarr
     q_vals = q[jnp.arange(a.shape[0]), a]
     return q_vals - target
 
-class RNNAgent(DQNAgent):
-    def __init__(self, network: hk.Transformed, 
+class LSTMAgent(DQNAgent):
+    def __init__(self, network: hk.Transformed, n_hidden: int, 
                  args: DQNArgs):
         # Constructor similar to DQNAgent except that network needs to be an RNN
         # TODO this is hardcoded 1 in David's impl - should this be an arg?
@@ -49,8 +50,13 @@ class RNNAgent(DQNAgent):
         assert args.trunc_len is not None
         self.trunc_len = args.trunc_len # for truncated backprop through time
         self._rand_key, network_rand_key = random.split(args.rand_key)
+        self.n_hidden = n_hidden
+        self.init_hidden_var = args.init_hidden_var
         self.network = network
-        self.network_params = self.network.init(rng=network_rand_key, x=jnp.zeros((self.batch_size, self.trunc_len, *self.features_shape), dtype=jnp.float32))
+        self.reset()
+        self.network_params = self.network.init(rng=network_rand_key, 
+                                                x=jnp.zeros((self.batch_size, self.trunc_len, *self.features_shape), dtype=jnp.float32),
+                                                h=self.hidden_state)
         if args.optimizer == "sgd":
             self.optimizer = sgd(args.alpha)
         else:
@@ -65,19 +71,33 @@ class RNNAgent(DQNAgent):
             raise NotImplementedError(f"Unrecognized learning algorithm {args.algo}")
         self.batch_error_fn = vmap(self.error_fn)
 
+    def reset(self):
+        """
+        Reset LSTM hidden states.
+        :return:
+        """
+        hs = jnp.zeros([self.batch_size, self.n_hidden])
+        cs = jnp.zeros([self.batch_size, self.n_hidden])
+        if self.init_hidden_var > 0.:
+            self._rand_key, keys = random.split(self._rand_key, num=3)
+            hs = random.normal(keys[0], shape=[self.batch_size, self.n_hidden]) * self.init_hidden_var
+            cs = random.normal(keys[1], shape=[self.batch_size, self.n_hidden]) * self.init_hidden_var
+        lstm_state = hk.LSTMState(hidden=hs, cell=cs)
+        self.hidden_state = lstm_state
+
         
     def act(self, obs: jnp.ndarray) -> jnp.ndarray:
         """
         Get next epsilon-greedy action given a obs, using the agent's parameters.
         :param obs: (batch x time_steps x obs_size) obs to find actions for. 
         """        
-        action, self._rand_key = self._functional_act(obs, self._rand_key, self.network_params)        
+        action, self.hidden_state, self._rand_key = self._functional_act(obs, self.hidden_state, self._rand_key, self.network_params)        
         
         return action
     
     @partial(jit, static_argnums=0)
-    def _functional_act(self, obs, rand_key, network_params):
-       policy, _ = self._functional_policy(obs, network_params)
+    def _functional_act(self, obs, h, rand_key, network_params):
+       policy, _ , new_hidden = self._functional_policy(obs, h, network_params)
        key, subkey = random.split(rand_key)
        #action_choices = jnp.full((*exp_obs.shape[:-1], self.n_actions), jnp.arange(self.n_actions))
     #    print(action_choices.shape)
@@ -92,49 +112,49 @@ class RNNAgent(DQNAgent):
                 key, subkey = random.split(key)
                 actions_ts.append(random.choice(key=subkey, a = jnp.arange(self.n_actions), p=policy[batch][ts]))
             action = jnp.append(action, jnp.array([actions_ts]), axis=-1)
-       return action, key
+       return action, new_hidden, key
 
-    def policy(self, obs: jnp.ndarray):
+    def policy(self, h: hk.LSTMState, obs: jnp.ndarray):
         """
         Get policy from agent's saved parameters at the given obs.
         :param obs: (batch x time_steps x obs_size) obs(s) to find actions for.
         """
-        return self._functional_policy(obs, self.network_params)
+        return self._functional_policy(obs, h, self.network_params)
 
     @partial(jit, static_argnums=0)
-    def _functional_policy(self, obs: jnp.ndarray, network_params: hk.Params) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def _functional_policy(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> Tuple[jnp.ndarray, jnp.ndarray]:
         probs = jnp.zeros((*obs.shape[:-1], self.n_actions)) + self.eps / self.n_actions
-        greedy_idx, qs = self._greedy_act(obs, network_params)
+        greedy_idx, qs, new_h = self._greedy_act(obs, h, network_params)
         # TODO I genuinely don't know a better way to do this atm, 
         # but hopefully this shouldn't add much overhead?
         for batch in range(probs.shape[0]):
             for ts in range(probs.shape[1]):
                 probs = probs.at[(batch, ts, greedy_idx[batch][ts])].add(1 - self.eps)
-        return probs, qs
+        return probs, qs, new_h
 
 
     @partial(jit, static_argnums=0)
-    def _greedy_act(self, obs: jnp.ndarray, network_params: hk.Params) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def _greedy_act(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Get greedy actions given a obs
         :param obs: (b x time_steps x *obs.shape) obs to find actions
         :param network_params: NN parameters to use to calculate Q.
         :return: (b x time_steps) Greedy actions
         """
-        qs = self.Qs(obs, network_params)
-        return jnp.argmax(qs, -1), qs
+        qs, new_h = self.Qs(obs, h, network_params)
+        return jnp.argmax(qs, -1), qs, new_h
 
     
-    def Qs(self, obs: jnp.ndarray, network_params: hk.Params) -> jnp.ndarray:
+    def Qs(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
         """
         Get all Q-values given a obs.
         :param obs: (b x time_steps x *obs.shape) obs to find action-values
         :param model: Optional. Potenially use another model
         :return: (b x time_steps x actions) torch.tensor full of action-values.
         """
-        return self.network.apply(network_params, obs)[0]
+        return self.network.apply(network_params, obs, h)
 
-    def Q(self, obs: jnp.ndarray, action: jnp.ndarray, network_params: hk.Params) -> jnp.ndarray:
+    def Q(self, obs: jnp.ndarray, action: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
         """
         Get action-values given a obs and action
         :param obs: (b x time_steps x *obs.shape) obs to find action-values
@@ -142,13 +162,16 @@ class RNNAgent(DQNAgent):
         :param network_params: NN parameters to use to calculate Q 
         :return: (b x time_steps) Action-values
         """
-        qs = self.Qs(obs, network_params)
+        qs = self.Qs(obs, h, network_params)
         return qs[jnp.arange(action.shape[0]), action]
     
     def _loss(self, network_params: hk.Params,
+             initial_hidden: hk.LSTMState,
              batch: JaxBatch):
-        q_s0 = self.Qs(batch.obs, network_params)
-        q_s1 = self.Qs(batch.next_obs, network_params)
+        #(B x T x A)
+        q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
+        q_s0 = q_all[:, :, :-1]
+        q_s1 = q_all[:, :, 1:]
         # print(action)
         # print(jnp.full(action.shape, self.gamma))
     
@@ -160,9 +183,10 @@ class RNNAgent(DQNAgent):
     def functional_update(self,
                           network_params: hk.Params,
                           optimizer_state: hk.State,
+                          hidden_state: hk.LSTMState,
                           batch: JaxBatch
                           ) -> Tuple[float, hk.Params, hk.State]:
-        loss, grad = jax.value_and_grad(self._loss)(network_params, batch)
+        loss, grad = jax.value_and_grad(self._loss)(network_params, hidden_state, batch)
         updates, optimizer_state = self.optimizer.update(grad, optimizer_state, network_params)
         network_params = optax.apply_updates(network_params, updates)
 
@@ -172,13 +196,13 @@ class RNNAgent(DQNAgent):
                batch: JaxBatch
                ) -> float:
         """
-        Update given a batch of data
+        Update given a batch of data, additionally resetting the LSTM state.
         :param batch: JaxBatch of data to process.
         :return: loss
         """
-
+        self.reset()
         loss, self.network_params, self.optimizer_state = \
-            self.functional_update(self.network_params, self.optimizer_state, batch)
+            self.functional_update(self.network_params, self.optimizer_state, self.hidden_state, batch)
         return loss
     
 def train_rnn_agent(mdp: MDP,
@@ -209,7 +233,7 @@ def train_rnn_agent(mdp: MDP,
         all_obs.append(o_0_processed)
         
         # need to wrap in batch dimension
-        a_0 = agent.act(np.array([all_obs]))[-1][-1]
+        a_0 = agent.act(np.array([[o_0_processed]]))[-1][-1]
         all_actions.append(a_0)
         
         for _ in range(agent.trunc_len):
@@ -223,7 +247,7 @@ def train_rnn_agent(mdp: MDP,
             all_obs.append(o_1_processed)
 
             # need to wrap in batch dimension
-            a_1 = agent.act(np.array([all_obs]))[-1][-1]
+            a_1 = agent.act(np.array([[o_1_processed]]))[-1][-1]
             all_actions.append(a_1)
             
             if done:
@@ -236,7 +260,8 @@ def train_rnn_agent(mdp: MDP,
             a_0 = a_1
             
        
-        batch = JaxBatch(obs=[all_obs[:-1]], 
+        batch = JaxBatch(all_obs = [all_obs],
+                         obs=[all_obs[:-1]], 
                              actions=[all_actions[:-1]], 
                              next_obs=[all_obs[1:]], 
                              terminals=[terminals], 
@@ -266,7 +291,7 @@ def train_rnn_agent(mdp: MDP,
             pct_neutral = 1 - pct_success - pct_fail
             avg_reward = np.average(np.array(avg_rewards))
             avg_rewards = []
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs}")# | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
             #print(f"Policy {agent.policy(batch.obs)}")
         
         num_eps = num_eps + 1
