@@ -16,18 +16,29 @@ class JaxBatch:
                  terminals: Union[np.ndarray, list[bool]] = [],
                  rewards: Union[np.ndarray, list[float]] = [],
                  next_actions: Union[np.ndarray, list[int]] = []) -> None:
-        # (b x num_observations)
-        self.obs = np.array(obs)
-        # (b x 1)
-        self.actions = np.array(actions, dtype=np.int32)
-        # (b x num_observations)
-        self.next_obs = np.array(next_obs)
-        # (b x 1)
-        self.terminals = np.array(terminals)
-        # (b x 1)
-        self.rewards = np.array(rewards)
-        # (b x 1)
-        self.next_actions = np.array(next_actions, dtype=np.int32)
+        args = [obs, actions, next_obs, terminals, rewards, next_actions]
+        tmap = set(map(lambda x: type(x), args))
+        assert len(tmap) == 1
+        if tmap.pop() == np.ndarray:
+            self.obs = obs
+            self.actions = actions
+            self.next_obs = next_obs
+            self.terminals = terminals
+            self.rewards = rewards
+            self.next_actions = next_actions
+        else:
+            # (b x num_observations)
+            self.obs = np.array(obs)
+            # (b x 1)
+            self.actions = np.array(actions, dtype=np.int32)
+            # (b x num_observations)
+            self.next_obs = np.array(next_obs)
+            # (b x 1)
+            self.terminals = np.array(terminals)
+            # (b x 1)
+            self.rewards = np.array(rewards)
+            # (b x 1)
+            self.next_actions = np.array(next_actions, dtype=np.int32)
 
     def tree_flatten(self):
         children = (self.obs, self.actions, self.next_obs, self.terminals, self.rewards, self.next_actions)
@@ -37,13 +48,7 @@ class JaxBatch:
     @classmethod
     def tree_unflatten(cls, aux_data, children):
         # https://jax.readthedocs.io/en/latest/pytrees.html#custom-pytrees-and-initialization
-        obj = object.__new__(JaxBatch)
-        obj.obs = children[0]
-        obj.actions = children[1]
-        obj.next_obs = children[2]
-        obj.terminals = children[3]
-        obj.rewards = children[4]
-        obj.next_actions = children[5]
+        obj = JaxBatch(*children)
         return obj
     
     def __str__(self) -> str:
