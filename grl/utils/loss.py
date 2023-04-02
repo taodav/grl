@@ -30,7 +30,7 @@ def discrep_loss(pi: jnp.ndarray, amdp: AbstractMDP,  # non-state args
 
     c_s = info['occupancy']
     # set terminal counts to 0
-    c_s = c_s.at[4:].set(0)
+    c_s = c_s.at[-2:].set(0)
     c_o = c_s @ amdp.phi
     count_o = c_o / c_o.sum()
 
@@ -47,18 +47,32 @@ def discrep_loss(pi: jnp.ndarray, amdp: AbstractMDP,  # non-state args
         weight = weight.sum(axis=0)
     weight = lax.stop_gradient(weight)
 
+    # squared msve bias term
+    weighted_diff = weight * diff
+    if value_type == 'q':
+        weighted_diff = weighted_diff.sum(axis=0)
+
+    summed_weighted_diff = weighted_diff.sum()
+
     if error_type == 'l2':
-        unweighted_err = (diff**2)
+        loss = summed_weighted_diff**2
     elif error_type == 'abs':
-        unweighted_err = jnp.abs(diff)
+        loss = jnp.abs(summed_weighted_diff)
     else:
         raise NotImplementedError(f"Error {error_type} not implemented yet in mem_loss fn.")
 
-    weighted_err = weight * unweighted_err
-    if value_type == 'q':
-        weighted_err = weighted_err.sum(axis=0)
-
-    loss = weighted_err.sum()
+    # if error_type == 'l2':
+    #     unweighted_err = (diff**2)
+    # elif error_type == 'abs':
+    #     unweighted_err = jnp.abs(diff)
+    # else:
+    #     raise NotImplementedError(f"Error {error_type} not implemented yet in mem_loss fn.")
+    #
+    # weighted_err = weight * unweighted_err
+    # if value_type == 'q':
+    #     weighted_err = weighted_err.sum(axis=0)
+    #
+    # loss = weighted_err.sum()
 
     return loss, lambda_1_vals, lambda_0_vals
 
