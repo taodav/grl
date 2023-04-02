@@ -119,6 +119,6 @@ def test_lstm_5len_tmaze():
     # assert jnp.all(jnp.isclose(v[0][:-1], ground_truth_vals, atol=0.05))
 
 if __name__ == "__main__":
-    test_lstm_chain_pomdp()
-    #test_lstm_5len_tmaze()
+    #test_lstm_chain_pomdp()
+    test_lstm_5len_tmaze()
 

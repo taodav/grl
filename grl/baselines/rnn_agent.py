@@ -4,8 +4,8 @@ Relies on haiku's recurrent API (https://dm-haiku.readthedocs.io/en/latest/api.h
 Also based on David Tao's implementation at https://github.com/taodav/uncertainty/blob/main/unc/agents/lstm.py .
 """
 import jax
-# from jax.config import config
-# config.update('jax_disable_jit', True)
+from jax.config import config
+config.update('jax_disable_jit', True)
 import jax.numpy as jnp
 import numpy as np
 import haiku as hk
@@ -27,7 +27,8 @@ def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarr
     :return:
     """
     # print(a.shape)
-    target = r + g * q1[jnp.arange(next_a.shape[0]), next_a]
+    q1_vals = q1[jnp.arange(next_a.shape[0]), next_a]
+    target = r + g * q1_vals
     # print('r', r)
     # print('g', g)
     # print('target', target)
@@ -68,7 +69,7 @@ class RNNAgent(DQNAgent):
     def act(self, obs: jnp.ndarray) -> jnp.ndarray:
         """
         Get next epsilon-greedy action given a obs, using the agent's parameters.
-        :param obs: (batch x obs_size) obs to find actions for. 
+        :param obs: (batch x time_steps x obs_size) obs to find actions for. 
         """        
         action, self._rand_key = self._functional_act(obs, self._rand_key, self.network_params)        
         
@@ -76,10 +77,7 @@ class RNNAgent(DQNAgent):
     
     @partial(jit, static_argnums=0)
     def _functional_act(self, obs, rand_key, network_params):
-       # expand obervation dim to include batch dim
-       # TODO maybe we should be doing this in the training loop?
-       exp_obs = jnp.expand_dims(obs, 0)
-       policy, _ = self._functional_policy(exp_obs, network_params)
+       policy, _ = self._functional_policy(obs, network_params)
        key, subkey = random.split(rand_key)
        #action_choices = jnp.full((*exp_obs.shape[:-1], self.n_actions), jnp.arange(self.n_actions))
     #    print(action_choices.shape)
@@ -210,7 +208,8 @@ def train_rnn_agent(mdp: MDP,
         o_0_processed = jit_onehot(o_0, mdp.n_obs)
         all_obs.append(o_0_processed)
         
-        a_0 = agent.act(np.array(all_obs))[-1][-1]
+        # need to wrap in batch dimension
+        a_0 = agent.act(np.array([all_obs]))[-1][-1]
         all_actions.append(a_0)
         
         for _ in range(agent.trunc_len):
@@ -223,7 +222,8 @@ def train_rnn_agent(mdp: MDP,
             o_1_processed = jit_onehot(o_1, mdp.n_obs)
             all_obs.append(o_1_processed)
 
-            a_1 = agent.act(np.array(all_obs))[-1][-1]
+            # need to wrap in batch dimension
+            a_1 = agent.act(np.array([all_obs]))[-1][-1]
             all_actions.append(a_1)
             
             if done:
