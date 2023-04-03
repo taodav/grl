@@ -71,10 +71,9 @@ class LSTMAgent(DQNAgent):
             raise NotImplementedError(f"Unrecognized learning algorithm {args.algo}")
         self.batch_error_fn = vmap(self.error_fn)
 
-    def reset(self):
-        """
-        Reset LSTM hidden states.
-        :return:
+    def get_initial_hidden_state(self):
+        """Get the initial state functionally so we can use it in update
+            and still retain our current hidden state.
         """
         hs = jnp.zeros([self.batch_size, self.n_hidden])
         cs = jnp.zeros([self.batch_size, self.n_hidden])
@@ -82,8 +81,14 @@ class LSTMAgent(DQNAgent):
             self._rand_key, keys = random.split(self._rand_key, num=3)
             hs = random.normal(keys[0], shape=[self.batch_size, self.n_hidden]) * self.init_hidden_var
             cs = random.normal(keys[1], shape=[self.batch_size, self.n_hidden]) * self.init_hidden_var
-        lstm_state = hk.LSTMState(hidden=hs, cell=cs)
-        self.hidden_state = lstm_state
+        return hk.LSTMState(hidden=hs, cell=cs)
+
+    def reset(self):
+        """
+        Reset LSTM hidden states.
+        :return:
+        """
+        self.hidden_state = self.get_initial_hidden_state()
 
         
     def act(self, obs: jnp.ndarray) -> jnp.ndarray:
@@ -170,8 +175,8 @@ class LSTMAgent(DQNAgent):
              batch: JaxBatch):
         #(B x T x A)
         q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
-        q_s0 = q_all[:, :, :-1]
-        q_s1 = q_all[:, :, 1:]
+        q_s0 = q_all[:, :-1, :]
+        q_s1 = q_all[:, 1:, :]
         # print(action)
         # print(jnp.full(action.shape, self.gamma))
     
@@ -200,9 +205,8 @@ class LSTMAgent(DQNAgent):
         :param batch: JaxBatch of data to process.
         :return: loss
         """
-        self.reset()
         loss, self.network_params, self.optimizer_state = \
-            self.functional_update(self.network_params, self.optimizer_state, self.hidden_state, batch)
+            self.functional_update(self.network_params, self.optimizer_state, self.get_initial_hidden_state(), batch)
         return loss
     
 def train_rnn_agent(mdp: MDP,
@@ -227,6 +231,7 @@ def train_rnn_agent(mdp: MDP,
     while (steps < total_steps):
         # truncation buffers
         all_obs, all_actions, terminals, rewards = [], [], [], []
+        agent.reset()
         
         o_0, _ = mdp.reset()
         o_0_processed = jit_onehot(o_0, mdp.n_obs)
@@ -275,11 +280,11 @@ def train_rnn_agent(mdp: MDP,
         batch_nonzero_rewards = np.fromiter((x for x in rewards if x != 0), dtype=np.float32)
         # if avg_rewards[-1] != 0:
         #     print(batch_nonzero_rewards)
-        if len(batch_nonzero_rewards) == 1 and num_eps > total_steps / 100:
-            print(f"Number of nonzero rewards was {len(batch_nonzero_rewards)}")
-            print(batch)
-            print(agent.Qs(batch.obs, agent.network_params))
-            #raise ValueError
+        # if len(batch_nonzero_rewards) == 1 and num_eps > total_steps / 100:
+        #     print(f"Number of nonzero rewards was {len(batch_nonzero_rewards)}")
+        #     print(batch)
+        #     print(agent.Qs(batch.all_obs, agent.get_initial_hidden_state(), agent.network_params))
+        #     #raise ValueError
         
         loss = agent.update(batch)
            
@@ -291,7 +296,7 @@ def train_rnn_agent(mdp: MDP,
             pct_neutral = 1 - pct_success - pct_fail
             avg_reward = np.average(np.array(avg_rewards))
             avg_rewards = []
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs}")# | Q-vals {agent.Qs(batch.obs, agent.network_params)}")
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.all_obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
             #print(f"Policy {agent.policy(batch.obs)}")
         
         num_eps = num_eps + 1

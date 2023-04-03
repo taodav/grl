@@ -54,7 +54,7 @@ class ManagedLSTM(hk.Module):
 def test_lstm_chain_pomdp():
     chain_length = 10
     spec = environment.load_spec('po_simple_chain', memory_id=None)
-    n_steps = 1e6 * chain_length
+    n_steps = 1e6
     n_hidden = 1
 
     print(f"Testing LSTM with Sequential SARSA on Simple Chain MDP over {n_steps} steps")
@@ -64,9 +64,9 @@ def test_lstm_chain_pomdp():
 
     ground_truth_vals = spec['gamma']**jnp.arange(chain_length - 2, -1, -1)
 
-    def _lstm_func(x: jnp.ndarray):
+    def _lstm_func(x: jnp.ndarray, h: hk.LSTMState):
         module = ManagedLSTM(n_hidden, pomdp.n_actions)
-        return module(x)
+        return module(x, h)
     
     transformed = hk.without_apply_rng(hk.transform(_lstm_func))
 
@@ -93,11 +93,11 @@ def test_lstm_chain_pomdp():
                                 [1.],
                                 [1.],
                                 [1.]]])
-    v = jnp.sum(agent.Qs(test_batch, agent.network_params), axis=-1)
+    v = jnp.sum(agent.Qs(test_batch, agent.get_initial_hidden_state(), agent.network_params)[0], axis=-1)
 
     print(f"Calculated values: {v[0]}\n"
           f"Ground-truth values: {ground_truth_vals}")
-    assert jnp.all(jnp.isclose(v[0], ground_truth_vals, atol=0.05))
+    assert jnp.all(jnp.isclose(v[0], ground_truth_vals, atol=0.02))
 
 
 def test_lstm_5len_tmaze():
@@ -139,6 +139,6 @@ def test_lstm_5len_tmaze():
     # assert jnp.all(jnp.isclose(v[0][:-1], ground_truth_vals, atol=0.05))
 
 if __name__ == "__main__":
-    #test_lstm_chain_pomdp()
-    test_lstm_5len_tmaze()
+    test_lstm_chain_pomdp()
+    #test_lstm_5len_tmaze()
 
