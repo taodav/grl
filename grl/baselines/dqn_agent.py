@@ -18,17 +18,10 @@ from . import DQNArgs
 
 # Error functions from David's impl
 def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
-    # print(a)
-    # print(next_a)
-    # print(r)
-    # print(g)
     
     target = r + g * q1[next_a]
     target = jax.lax.stop_gradient(target)
    
-    # print(target)
-    # print(a)
-    # print()
     return q[a] - target
 
 
@@ -82,6 +75,9 @@ class DQNAgent:
         elif args.algo == 'qlearning':
             self.error_fn = qlearning_error
         self.batch_error_fn = vmap(self.error_fn)
+
+    def set_epsilon(self, eps):
+        self.eps = eps
 
     def act(self, state: jnp.ndarray) -> jnp.ndarray:
         """
@@ -150,8 +146,6 @@ class DQNAgent:
              batch: JaxBatch):
         q_s0 = self.Qs(batch.obs, network_params)
         q_s1 = self.Qs(batch.next_obs, network_params)
-        # print(action)
-        # print(jnp.full(action.shape, self.gamma))
     
 
         td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)

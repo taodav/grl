@@ -27,19 +27,18 @@ def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarr
     First axis of all tensors are the sequence length.
     :return:
     """
-    # print(a.shape)
     q1_vals = q1[jnp.arange(next_a.shape[0]), next_a]
+
     target = r + g * q1_vals
-    # print('r', r)
-    # print('g', g)
-    # print('target', target)
     target = jax.lax.stop_gradient(target)
+
     q_vals = q[jnp.arange(a.shape[0]), a]
     return q_vals - target
 
 class LSTMAgent(DQNAgent):
     def __init__(self, network: hk.Transformed, n_hidden: int, 
                  args: DQNArgs):
+        self.args = args
         # Constructor similar to DQNAgent except that network needs to be an RNN
         # TODO this is hardcoded 1 in David's impl - should this be an arg?
         self.batch_size = 1
@@ -96,20 +95,18 @@ class LSTMAgent(DQNAgent):
         Get next epsilon-greedy action given a obs, using the agent's parameters.
         :param obs: (batch x time_steps x obs_size) obs to find actions for. 
         """        
-        action, self.hidden_state, self._rand_key = self._functional_act(obs, self.hidden_state, self._rand_key, self.network_params)        
+        action, self.hidden_state, self._rand_key = self._functional_act(obs, self.hidden_state, self._rand_key, self.network_params, self.eps)        
         
         return action
     
     @partial(jit, static_argnums=0)
-    def _functional_act(self, obs, h, rand_key, network_params):
-       policy, _ , new_hidden = self._functional_policy(obs, h, network_params)
+    def _functional_act(self, obs, h, rand_key, network_params, epsilon):
+       policy, _ , new_hidden = self._functional_policy(obs, h, network_params, epsilon)
        key, subkey = random.split(rand_key)
-       #action_choices = jnp.full((*exp_obs.shape[:-1], self.n_actions), jnp.arange(self.n_actions))
-    #    print(action_choices.shape)
-    #    print(policy.shape)
+      
        # TODO is there a better way? for some reason the following doesn't work
+       # action_choices = jnp.full((*exp_obs.shape[:-1], self.n_actions), jnp.arange(self.n_actions))
        # action = random.choice(key=subkey, a=action_choices, p=policy, axis=-1, shape=(*exp_obs.shape[:-1], 1))
-       
        action = jnp.array([[]], dtype=jnp.int32)
        for batch in range(policy.shape[0]):
             actions_ts = []
@@ -124,17 +121,16 @@ class LSTMAgent(DQNAgent):
         Get policy from agent's saved parameters at the given obs.
         :param obs: (batch x time_steps x obs_size) obs(s) to find actions for.
         """
-        return self._functional_policy(obs, h, self.network_params)
+        return self._functional_policy(obs, h, self.network_params, self.eps)
 
     @partial(jit, static_argnums=0)
-    def _functional_policy(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        probs = jnp.zeros((*obs.shape[:-1], self.n_actions)) + self.eps / self.n_actions
+    def _functional_policy(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params, epsilon: float) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        probs = jnp.zeros((*obs.shape[:-1], self.n_actions)) + epsilon / self.n_actions
         greedy_idx, qs, new_h = self._greedy_act(obs, h, network_params)
-        # TODO I genuinely don't know a better way to do this atm, 
-        # but hopefully this shouldn't add much overhead?
+        # TODO I genuinely don't know a better/more efficient way to do this ATM - suggestions very welcome!
         for batch in range(probs.shape[0]):
             for ts in range(probs.shape[1]):
-                probs = probs.at[(batch, ts, greedy_idx[batch][ts])].add(1 - self.eps)
+                probs = probs.at[(batch, ts, greedy_idx[batch][ts])].add(1 - epsilon)
         return probs, qs, new_h
 
 
@@ -177,8 +173,6 @@ class LSTMAgent(DQNAgent):
         q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
         q_s0 = q_all[:, :-1, :]
         q_s1 = q_all[:, 1:, :]
-        # print(action)
-        # print(jnp.full(action.shape, self.gamma))
     
 
         td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)
@@ -211,7 +205,7 @@ class LSTMAgent(DQNAgent):
     
 def train_rnn_agent(mdp: MDP,
                     agent: DQNAgent,
-                    total_steps: int,
+                    total_eps: int,
                     zero_obs = False):
     """
     Training loop for a dqn agent.
@@ -222,16 +216,29 @@ def train_rnn_agent(mdp: MDP,
 
     steps = 0
     num_eps = 0
+    args = agent.args
+    epsilon_final = args.epsilon
+    anneal_steps = args.anneal_steps
+    epsilon_start = args.epsilon_start
+    anneal_value = (epsilon_start - epsilon_final) / anneal_steps if anneal_steps > 0 else 0
+
+    if epsilon_start != epsilon_final:
+        agent.set_epsilon(epsilon_start)
+
 
     jit_onehot = jax.jit(one_hot, static_argnames=["n"])
     if zero_obs:
         jit_onehot = jax.jit(lambda x, y: jnp.zeros((mdp.n_obs,)))
     
     avg_rewards = []
-    while (steps < total_steps):
-        # truncation buffers
+    episode_lengths = []
+    pct_success = 0.
+    avg_len = 0.
+    while (num_eps < total_eps):
+        # episode buffers
         all_obs, all_actions, terminals, rewards = [], [], [], []
         agent.reset()
+        done = False
         
         o_0, _ = mdp.reset()
         o_0_processed = jit_onehot(o_0, mdp.n_obs)
@@ -241,8 +248,10 @@ def train_rnn_agent(mdp: MDP,
         a_0 = agent.act(np.array([[o_0_processed]]))[-1][-1]
         all_actions.append(a_0)
         
-        for _ in range(agent.trunc_len):
-            
+        # TODO no truncation length
+        # For PR: is this functionality that we want to make optional?
+        #for _ in range(agent.trunc_len):
+        while not done:
             o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
             terminals.append(done)
             rewards.append(r_0)
@@ -255,9 +264,9 @@ def train_rnn_agent(mdp: MDP,
             a_1 = agent.act(np.array([[o_1_processed]]))[-1][-1]
             all_actions.append(a_1)
             
-            if done:
-                #print(f"Broke early after {t} steps")
-                break
+            # if done:
+            #     #print(f"Broke early after {t} steps")
+            #     break
             
             
             
@@ -272,36 +281,30 @@ def train_rnn_agent(mdp: MDP,
                              terminals=[terminals], 
                              rewards=[rewards], 
                              next_actions=[all_actions[1:]])
-        
-        if len(all_actions[:-1]) > agent.trunc_len:
-            print(f"Episode length {len(all_actions[:-1])} was longer than truncation len {agent.trunc_len}")
-        
+
         avg_rewards.append(np.average(rewards))
-        batch_nonzero_rewards = np.fromiter((x for x in rewards if x != 0), dtype=np.float32)
-        # if avg_rewards[-1] != 0:
-        #     print(batch_nonzero_rewards)
-        # if len(batch_nonzero_rewards) == 1 and num_eps > total_steps / 100:
-        #     print(f"Number of nonzero rewards was {len(batch_nonzero_rewards)}")
-        #     print(batch)
-        #     print(agent.Qs(batch.all_obs, agent.get_initial_hidden_state(), agent.network_params))
-        #     #raise ValueError
         
         loss = agent.update(batch)
+        episode_lengths.append(len(rewards))
            
         if num_eps % 1000 == 0:
+            # various monitoring metrics
+            # TODO should I trim these down?
             rewards_good = [x for x in avg_rewards if x > 0]
             rewards_bad = [x for x in avg_rewards if x < 0]
             pct_success = len(rewards_good) / len(avg_rewards)
             pct_fail = len(rewards_bad) / len(avg_rewards)
             pct_neutral = 1 - pct_success - pct_fail
-            avg_reward = np.average(np.array(avg_rewards))
             avg_rewards = []
-            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.all_obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
-            #print(f"Policy {agent.policy(batch.obs)}")
+            avg_len = np.average(np.array(episode_lengths))
+            episode_lengths = []
+            print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
         
         num_eps = num_eps + 1
-        # if num_eps >= 50000:
-        #     print("break")
+       
+        # Anneal Epsilon
+        if anneal_steps > 0 and anneal_steps > num_eps:
+            agent.set_epsilon(epsilon_start - anneal_value * num_eps)
 
-    return agent
+    return agent, {"pct_success": pct_success, "avg_len": avg_len}
         

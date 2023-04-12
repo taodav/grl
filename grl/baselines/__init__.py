@@ -9,6 +9,8 @@ class DQNArgs:
     gamma: float
     rand_key: random.PRNGKey
     epsilon: float = 0.1
+    epsilon_start: float = 1.
+    anneal_steps: int = 0
     optimizer: str = "sgd"
     alpha: float = 0.01
     algo: str = "sarsa"
