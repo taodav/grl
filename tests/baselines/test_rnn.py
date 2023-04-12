@@ -141,5 +141,5 @@ def test_lstm_5len_tmaze():
     
 if __name__ == "__main__":
     test_lstm_chain_pomdp()
-    #test_lstm_5len_tmaze()
+    test_lstm_5len_tmaze()
 
