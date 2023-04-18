@@ -190,6 +190,15 @@ def train_dqn_agent(mdp: MDP,
     num_eps = 0
     # Not really batching just updating at each step
     states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
+
+    # logging
+    avg_rewards_ep = []
+    avg_rewards = []
+    avg_lengths = []
+    episode_lengths = []
+    losses = []
+    pct_success = 0.
+    avg_len = 0.
     while (steps < total_steps):
         done = False
         s_0, _ = mdp.reset()
@@ -222,9 +231,26 @@ def train_dqn_agent(mdp: MDP,
             steps = steps + 1
             states, actions, next_states, terminals, rewards, next_actions = [], [], [], [], [], []
                
-
+            avg_rewards_ep.append(np.average(rewards))
 
             if steps % 1000 == 0:
+                # various monitoring metrics
+                # TODO should I trim these down?
+                rewards_good = [x for x in avg_rewards_ep if x > 0]
+                rewards_bad = [x for x in avg_rewards_ep if x < 0]
+                pct_success = len(rewards_good) / len(avg_rewards_ep)
+                pct_fail = len(rewards_bad) / len(avg_rewards_ep)
+                pct_neutral = 1 - pct_success - pct_fail
+                avg_rewards.append(np.average(avg_rewards_ep))
+                avg_rewards_ep = []
+                
+            
+                avg_len = np.average(np.array(episode_lengths))
+                avg_lengths.append(avg_len)
+                episode_lengths = []
+
+                losses.append(loss)
+
                 print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
                        
                 
@@ -232,7 +258,17 @@ def train_dqn_agent(mdp: MDP,
         
         num_eps = num_eps + 1
 
-    return agent
+    
+    p, q = agent.policy(np.array([one_hot(s, mdp.n_obs) for s in range(mdp.n_obs)]))
+
+    info = {"final_pct_success": pct_success, 
+            "avg_len": avg_lengths, 
+            "avg_reward": avg_rewards, 
+            "loss": losses, 
+            "final_pi": p,
+            "final_q": q}
+
+    return info, agent
         
 
 

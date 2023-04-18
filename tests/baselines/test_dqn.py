@@ -8,18 +8,8 @@ from grl.mdp import one_hot
 config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, environment
-from grl.baselines.dqn_agent import DQNAgent, DQNArgs, train_dqn_agent
-
-class SimpleNN(hk.Module):
-    def __init__(self, input_size, output_size, name='basic_mlp'):
-        super().__init__(name=name)
-        self._internal_linear_1 = hk.nets.MLP([input_size, output_size], 
-                                              w_init=hk.initializers.RandomUniform(), 
-                                              b_init=hk.initializers.RandomUniform(),
-                                              name='hk_linear')
-
-    def __call__(self, x):
-        return self._internal_linear_1(x)
+from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
+from grl.baselines import DQNArgs, SimpleNN
 
 
 def test_sarsa_chain_mdp():
@@ -42,7 +32,7 @@ def test_sarsa_chain_mdp():
     agent_args = DQNArgs((mdp.n_obs,), mdp.n_actions, mdp.gamma, subkey, algo = "sarsa")
     agent = DQNAgent(transformed, agent_args)
 
-    agent = train_dqn_agent(mdp, agent, n_steps)
+    _, agent = train_dqn_agent(mdp, agent, n_steps)
 
 
     v = jnp.array([jnp.sum(agent.Qs(one_hot(s, mdp.n_obs), agent.network_params)) for s in range(mdp.n_obs)])

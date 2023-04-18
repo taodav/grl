@@ -231,7 +231,10 @@ def train_rnn_agent(mdp: MDP,
         jit_onehot = jax.jit(lambda x, y: jnp.zeros((mdp.n_obs,)))
     
     avg_rewards = []
+    avg_rewards_ep = []
+    avg_lengths = []
     episode_lengths = []
+    losses = []
     pct_success = 0.
     avg_len = 0.
     while (num_eps < total_eps):
@@ -282,22 +285,27 @@ def train_rnn_agent(mdp: MDP,
                              rewards=[rewards], 
                              next_actions=[all_actions[1:]])
 
-        avg_rewards.append(np.average(rewards))
-        
+       
         loss = agent.update(batch)
         episode_lengths.append(len(rewards))
+        avg_rewards_ep.append(np.average(rewards))
            
         if num_eps % 1000 == 0:
             # various monitoring metrics
             # TODO should I trim these down?
-            rewards_good = [x for x in avg_rewards if x > 0]
-            rewards_bad = [x for x in avg_rewards if x < 0]
-            pct_success = len(rewards_good) / len(avg_rewards)
-            pct_fail = len(rewards_bad) / len(avg_rewards)
+            rewards_good = [x for x in avg_rewards_ep if x > 0]
+            rewards_bad = [x for x in avg_rewards_ep if x < 0]
+            pct_success = len(rewards_good) / len(avg_rewards_ep)
+            pct_fail = len(rewards_bad) / len(avg_rewards_ep)
             pct_neutral = 1 - pct_success - pct_fail
-            avg_rewards = []
+            avg_rewards.append(np.average(avg_rewards_ep))
+            avg_rewards_ep = []
+        
             avg_len = np.average(np.array(episode_lengths))
+            avg_lengths.append(avg_len)
             episode_lengths = []
+
+            losses.append(loss)
             print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
         
         num_eps = num_eps + 1
@@ -306,5 +314,13 @@ def train_rnn_agent(mdp: MDP,
         if anneal_steps > 0 and anneal_steps > num_eps:
             agent.set_epsilon(epsilon_start - anneal_value * num_eps)
 
-    return agent, {"pct_success": pct_success, "avg_len": avg_len}
+    agent.reset()
+    final_policy, final_q, _ = agent.policy(agent.get_initial_hidden_state(), batch.obs)
+    info = {"final_pct_success": pct_success, 
+            "avg_len": avg_lengths, 
+            "avg_reward": avg_rewards, 
+            "loss": losses, 
+            "final_pi": final_policy,
+            "final_q": final_q}
+    return info, agent
         

@@ -9,46 +9,8 @@ import numpy as np
 config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, AbstractMDP, environment
-from grl.baselines.dqn_agent import DQNArgs
+from grl.baselines import DQNArgs, ManagedLSTM
 from grl.baselines.rnn_agent import LSTMAgent, train_rnn_agent
-
-
-class SimpleGRU(hk.Module):
-    def __init__(self, hidden_size, output_size, name='basic_gru'):
-        super().__init__(name=name)
-        init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
-        b_init = hk.initializers.Constant(0)
-        self._lstm = hk.GRU(hidden_size, w_i_init=init, 
-                        w_h_init=init, 
-                        b_init=b_init)
-        
-        self._linear = hk.Linear(output_size, w_init=init, b_init = b_init)
-        
-
-    def __call__(self, x):
-        batch_size = x.shape[0]
-        initial_state = self._lstm.initial_state(batch_size)
-        # initial_state = jnp.zeros(initial_state.shape)
-        outputs, cell_state = hk.dynamic_unroll(self._lstm, x, initial_state, time_major=False)
-        return hk.BatchApply(self._linear)(outputs), cell_state
-    
-class ManagedLSTM(hk.Module):
-    """
-    LSTM that expects its hidden state to be managed by the calling class.
-    """
-    def __init__(self, hidden_size, output_size, name='managed_lstm'):
-        super().__init__(name=name)
-        init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
-        b_init = hk.initializers.Constant(0)
-        self._lstm = hk.LSTM(hidden_size)
-        
-        self._linear = hk.Linear(output_size, w_init=init, b_init = b_init)
-        
-
-    def __call__(self, x, h):
-        # initial_state = jnp.zeros(initial_state.shape)
-        outputs, cell_state = hk.dynamic_unroll(self._lstm, x, h, time_major=False)
-        return hk.BatchApply(self._linear)(outputs), cell_state
 
 
 def test_lstm_chain_pomdp():
@@ -81,7 +43,7 @@ def test_lstm_chain_pomdp():
                          alpha=0.01)
     agent = LSTMAgent(transformed, n_hidden, agent_args)
 
-    agent, train_metadata = train_rnn_agent(pomdp, agent, n_eps, zero_obs=False)
+    _, agent = train_rnn_agent(pomdp, agent, n_eps, zero_obs=False)
 
 
     test_batch = jnp.array([[[1.],
@@ -110,8 +72,6 @@ def test_lstm_5len_tmaze():
     print(f"Testing LSTM with Sequential SARSA on 5-length T-maze over {n_eps} episodes with trunc length {trunc_len}")
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
     pomdp = AbstractMDP(mdp, spec['phi'])
-    print(pomdp.n_states)
-    print(pomdp.n_obs)
 
     def _lstm_func(x: jnp.ndarray, h: hk.LSTMState):
         module = ManagedLSTM(n_hidden, pomdp.n_actions)
@@ -133,10 +93,10 @@ def test_lstm_5len_tmaze():
                          anneal_steps=n_eps / 2)
     agent = LSTMAgent(transformed, n_hidden, agent_args)
 
-    agent, train_metadata = train_rnn_agent(pomdp, agent, n_eps)
+    train_logs, agent_args = train_rnn_agent(pomdp, agent, n_eps)
 
-    assert train_metadata["pct_success"] >= 0.95
-    assert train_metadata["avg_len"] < 10.
+    assert train_logs["final_pct_success"] >= 0.95
+    assert train_logs["avg_len"][-1] < 10.
 
     
 if __name__ == "__main__":
