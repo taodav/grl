@@ -5,7 +5,7 @@ from typing import Union
 from jax.config import config
 
 import numpy as np
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 from grl import environment
 from grl.agents.actorcritic import ActorCritic
