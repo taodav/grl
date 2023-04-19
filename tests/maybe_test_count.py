@@ -102,11 +102,11 @@ def test_count():
 
     rand_key = random.PRNGKey(seed)
     spec = load_spec(spec_name,
-                     memory_id=str(0),
+                     memory_id=str(16),
                      corridor_length=5,
                      discount=0.9,
-                     junction_up_pi=2/3,
-                     epsilon=0.1)
+                     junction_up_pi=1.,
+                     epsilon=0.2)
 
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
     amdp = AbstractMDP(mdp, spec['phi'])
@@ -126,6 +126,11 @@ def test_count():
     mem_aug_mdp = MDP(mem_aug_amdp.T, mem_aug_amdp.R, mem_aug_amdp.p0, mem_aug_amdp.gamma)
     pi_ground = (spec['phi'] @ spec['Pi_phi'][0]).repeat(n_mem_states, 0)
 
+    print("Calculating analytical occupancy")
+    c_s = functional_get_occupancy(pi_ground, mem_aug_mdp)
+    c_s = c_s.at[-2:].set(0)
+    analytical_count_dist = c_s / c_s.sum(axis=-1, keepdims=True)
+
     state_counts = np.zeros(mem_aug_mdp.n_states, dtype=int)
     print(f"Collecting {samples} samples from {spec_name} spec")
     obs, info = mem_aug_mdp.reset()
@@ -143,14 +148,10 @@ def test_count():
             obs, info = mem_aug_mdp.reset()
             obs = jnp.array(obs)
 
-
     sampled_count_dist = state_counts / state_counts.sum(axis=-1, keepdims=True)
     print("Done collecting samples.")
 
-    print("Calculating analytical occupancy")
-    c_s = functional_get_occupancy(pi_ground, mem_aug_mdp)
-    c_s = c_s.at[-2:].set(0)
-    analytical_count_dist = c_s / c_s.sum(axis=-1, keepdims=True)
+
 
     assert jnp.allclose(sampled_count_dist, analytical_count_dist, atol=1e-3)
 

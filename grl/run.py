@@ -45,14 +45,20 @@ if __name__ == '__main__':
     parser.add_argument('--policy_optim_alg', type=str, default='policy_iter',
                         help='policy improvement algorithm to use. "policy_iter" - policy iteration, "policy_grad" - policy gradient, '
                              '"discrep_max" - discrepancy maximization, "discrep_min" - discrepancy minimization')
+    parser.add_argument('--optimizer', type=str, default='adam',
+                        help='What optimizer do we use? (sgd | adam | rmsprop)')
     parser.add_argument('--init_pi', default=None, type=str,
                         help='Do we initialize our policy to something?')
     parser.add_argument('--use_memory', default=None, type=str,
         help='use memory function during policy eval if set')
-    parser.add_argument('--mem_fuzz', default=0.1, type=float,
-                        help='For the fuzzy identity memory function, how much fuzz do we add?')
+    parser.add_argument('--mem_leakiness', default=0.1, type=float,
+                        help='For the leaky identity memory function, how leaky is it?')
     parser.add_argument('--n_mem_states', default=2, type=int,
                         help='for memory_id = 0, how many memory states do we have?')
+    parser.add_argument('--lambda_0', default=0., type=float,
+                        help='First lambda parameter for lambda-discrep')
+    parser.add_argument('--lambda_1', default=1., type=float,
+                        help='Second lambda parameter for lambda-discrep')
     parser.add_argument('--alpha', default=1., type=float,
                         help='Temperature parameter, for how uniform our lambda-discrep weighting is')
     parser.add_argument('--flip_count_prob', action='store_true',
@@ -62,13 +68,13 @@ if __name__ == '__main__':
     parser.add_argument('--error_type', default='l2', type=str,
                         help='Do we use (l2 | abs) for our discrepancies?')
     parser.add_argument('--objective', default='discrep', type=str,
-                        help='What objective are we trying to optimize? (discrep | magnitude)')
+                        help='What objective are we trying to optimize? (discrep | magnitude | obs_space)')
     parser.add_argument('--lr', default=1, type=float)
     parser.add_argument('--epsilon', default=0.1, type=float,
                         help='(POLICY ITERATION AND TMAZE_EPS_HYPERPARAMS ONLY) What epsilon do we use?')
     parser.add_argument('--log', action='store_true',
         help='save output to logs/')
-    parser.add_argument('--experiment_name', default=None, type=str,
+    parser.add_argument('--study_name', default=None, type=str,
         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
     parser.add_argument('--platform', default='cpu', type=str,
                         help='What platform do we run things on? (cpu | gpu)')
@@ -112,7 +118,7 @@ if __name__ == '__main__':
                      discount=args.tmaze_discount,
                      junction_up_pi=args.tmaze_junction_up_pi,
                      epsilon=args.epsilon,
-                     fuzz=args.mem_fuzz)
+                     mem_leakiness=args.mem_leakiness)
 
     logging.info(f'spec:\n {args.spec}\n')
     logging.info(f'T:\n {spec["T"]}')
@@ -134,16 +140,19 @@ if __name__ == '__main__':
     if args.init_pi is not None:
         pi_params = get_start_pi(args.init_pi, spec=spec)
     logs, agent = run_memory_iteration(spec,
-                                       pi_lr=args.lr,
-                                       mi_lr=args.lr,
                                        rand_key=rand_key,
                                        mi_iterations=args.mi_iterations,
                                        policy_optim_alg=args.policy_optim_alg,
+                                       optimizer_str=args.optimizer,
+                                       pi_lr=args.lr,
+                                       mi_lr=args.lr,
                                        mi_steps=args.mi_steps,
                                        pi_steps=args.pi_steps,
                                        value_type=args.value_type,
                                        error_type=args.error_type,
                                        objective=args.objective,
+                                       lambda_0=args.lambda_0,
+                                       lambda_1=args.lambda_1,
                                        alpha=args.alpha,
                                        epsilon=args.epsilon,
                                        pi_params=pi_params,

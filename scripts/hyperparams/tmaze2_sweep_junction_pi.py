@@ -2,14 +2,14 @@ import numpy as np
 
 hparams = {
     'file_name':
-        'runs_tmaze_sweep_junction_pi.txt',
+        'runs_tmaze2_sweep_junction_pi.txt',
     'args': [{
         'spec': 'tmaze_hyperparams',
-        'tmaze_corridor_length': 5,
+        'tmaze_corridor_length': 2,
         'tmaze_discount': 0.9,
         'tmaze_junction_up_pi': np.linspace(0, 0.5, num=26),
         'value_type': 'q',
-        'alpha': 0.,
+        'alpha': 1.,
         'use_memory': 0,
         'mi_steps': 50000,
         'pi_steps': 0,

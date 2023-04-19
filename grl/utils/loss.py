@@ -3,30 +3,26 @@ from jax import nn, lax, jit
 from functools import partial
 
 from grl.utils.mdp import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
-from grl.utils.policy_eval import analytical_pe, functional_solve_mdp
+from grl.utils.policy_eval import analytical_pe, lstdq_lambda, functional_solve_mdp
 from grl.memory import memory_cross_product
 from grl.mdp import MDP, AbstractMDP
 """
 The following few functions are loss function w.r.t. memory parameters, mem_params.
 """
 
-@partial(jit, static_argnames=['value_type', 'error_type', 'alpha', 'flip_count_prob'])
-def discrep_loss(pi: jnp.ndarray, amdp: AbstractMDP,  # non-state args
-                 value_type: str = 'q', error_type: str = 'l2', alpha: float = 1.,
-                 flip_count_prob: bool = False): # initialize static args
-    _, mc_vals, td_vals, info = analytical_pe(pi, amdp)
-    diff = mc_vals[value_type] - td_vals[value_type]
-
-    c_s = info['occupancy']
+def weight_and_sum_discrep_loss(diff: jnp.ndarray, occupancy: jnp.ndarray,
+                                pi: jnp.ndarray, amdp: AbstractMDP,
+                                value_type: str = 'q', error_type: str = 'l2',
+                                alpha: float = 1., flip_count_prob: bool = False):
     # set terminal counts to 0
-    c_s = c_s.at[-2:].set(0)
-    c_o = c_s @ amdp.phi
+    c_o = occupancy @ amdp.phi
     count_o = c_o / c_o.sum()
 
     if flip_count_prob:
         count_o = nn.softmax(-count_o)
 
-    uniform_o = jnp.ones(pi.shape[0]) / pi.shape[0]
+    count_mask = (1 - jnp.isclose(count_o, 0, atol=1e-12)).astype(float)
+    uniform_o = (jnp.ones(pi.shape[0]) / count_mask.sum()) * count_mask
 
     p_o = alpha * uniform_o + (1 - alpha) * count_o
 
@@ -47,21 +43,90 @@ def discrep_loss(pi: jnp.ndarray, amdp: AbstractMDP,  # non-state args
         weighted_err = weighted_err.sum(axis=0)
 
     loss = weighted_err.sum()
+    return loss
 
-    return loss, mc_vals, td_vals
+@partial(jit, static_argnames=['value_type', 'error_type', 'lambda_0', 'lambda_1', 'alpha', 'flip_count_prob'])
+def discrep_loss(pi: jnp.ndarray, amdp: AbstractMDP,  # non-state args
+                 value_type: str = 'q', error_type: str = 'l2',
+                 lambda_0: float = 0., lambda_1: float = 1., alpha: float = 1.,
+                 flip_count_prob: bool = False): # initialize static args
+    if lambda_0 == 0. and lambda_1 == 1.:
+        _, mc_vals, td_vals, info = analytical_pe(pi, amdp)
+        lambda_0_vals = td_vals
+        lambda_1_vals = mc_vals
+    else:
+        # TODO: info here only contains state occupancy, which should lambda agnostic.
+        lambda_0_v_vals, lambda_0_q_vals, _ = lstdq_lambda(pi, amdp, lambda_=lambda_0)
+        lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi, amdp, lambda_=lambda_1)
+        lambda_0_vals = { 'v': lambda_0_v_vals, 'q': lambda_0_q_vals }
+        lambda_1_vals = { 'v': lambda_1_v_vals, 'q': lambda_1_q_vals }
+
+    diff = lambda_1_vals[value_type] - lambda_0_vals[value_type]
+    c_s = info['occupancy'].at[-2:].set(0)
+    loss = weight_and_sum_discrep_loss(diff, c_s, pi, amdp,
+                                       value_type=value_type, error_type=error_type,
+                                       alpha=alpha, flip_count_prob=flip_count_prob)
+
+    return loss, lambda_1_vals, lambda_0_vals
 
 def mem_discrep_loss(mem_params: jnp.ndarray, pi: jnp.ndarray, amdp: AbstractMDP,  # input non-static arrays
-                     value_type: str = 'q', error_type: str = 'l2', alpha: float = 1.,
+                     value_type: str = 'q', error_type: str = 'l2',
+                     lambda_0: float = 0., lambda_1: float = 1., alpha: float = 1.,
                      flip_count_prob: bool = False):  # initialize with partial
     mem_aug_amdp = memory_cross_product(mem_params, amdp)
-    loss, _, _ = discrep_loss(pi, mem_aug_amdp, value_type, error_type, alpha, flip_count_prob=flip_count_prob)
+    loss, _, _ = discrep_loss(pi, mem_aug_amdp, value_type, error_type, lambda_0=lambda_0, lambda_1=lambda_1,
+                              alpha=alpha, flip_count_prob=flip_count_prob)
+    return loss
+
+def obs_space_mem_discrep_loss(mem_params: jnp.ndarray, pi: jnp.ndarray, amdp: AbstractMDP,  # input non-static arrays
+                         value_type: str = 'q', error_type: str = 'l2',
+                         lambda_0: float = 0., lambda_1: float = 1., alpha: float = 1.,
+                         flip_count_prob: bool = False):
+    """
+    Memory discrepancy loss on the TD(0) estimator over observation space.
+
+    """
+    mem_aug_amdp = memory_cross_product(mem_params, amdp)
+
+    n_mem_states = mem_params.shape[-1]
+    pi_obs = pi[::n_mem_states]
+    mem_lambda_0_v_vals, mem_lambda_0_q_vals, mem_info = lstdq_lambda(pi, mem_aug_amdp, lambda_=lambda_0)
+    lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi_obs, amdp, lambda_=lambda_1)
+
+    counts_mem_aug_flat_obs = mem_info['occupancy'] @ mem_aug_amdp.phi
+    counts_mem_aug_flat = jnp.einsum('i,ij->ij', counts_mem_aug_flat_obs, pi).T  # A x OM
+
+    counts_mem_aug = counts_mem_aug_flat.reshape(amdp.n_actions, -1, n_mem_states)  # A x O x M
+
+    denom_counts_mem_aug_unmasked = counts_mem_aug.sum(axis=-1, keepdims=True)
+    denom_mask = (denom_counts_mem_aug_unmasked == 0).astype(float)
+    denom_counts_mem_aug = denom_counts_mem_aug_unmasked + denom_mask
+    prob_mem_given_oa = counts_mem_aug / denom_counts_mem_aug
+
+    unflattened_lambda_0_q_vals = mem_lambda_0_q_vals.reshape(amdp.n_actions, -1, n_mem_states)
+    reformed_lambda_0_q_vals = (unflattened_lambda_0_q_vals * prob_mem_given_oa).sum(axis=-1)
+
+    lambda_1_vals = {'v': lambda_1_v_vals, 'q': lambda_1_q_vals}
+    lambda_0_vals = {'v': (reformed_lambda_0_q_vals * pi_obs.T).sum(0), 'q': reformed_lambda_0_q_vals}
+
+    diff = lambda_1_vals[value_type] - lambda_0_vals[value_type]
+
+    c_s = info['occupancy']
+    # set terminal counts to 0
+    c_s = c_s.at[-1:].set(0)
+
+    loss = weight_and_sum_discrep_loss(diff, c_s, pi_obs, amdp,
+                                       value_type=value_type, error_type=error_type,
+                                       alpha=alpha, flip_count_prob=flip_count_prob)
     return loss
 
 def policy_discrep_loss(pi_params: jnp.ndarray, amdp: AbstractMDP,
-                        value_type: str = 'q', error_type: str = 'l2', alpha: float = 1.,
+                        value_type: str = 'q', error_type: str = 'l2',
+                        lambda_0: float = 0., lambda_1: float = 1., alpha: float = 1.,
                         flip_count_prob: bool = False):  # initialize with partial
     pi = nn.softmax(pi_params, axis=-1)
-    loss, mc_vals, td_vals = discrep_loss(pi, amdp, value_type, error_type, alpha, flip_count_prob=flip_count_prob)
+    loss, mc_vals, td_vals = discrep_loss(pi, amdp, value_type, error_type, lambda_0=lambda_0, lambda_1=lambda_1,
+                                          alpha=alpha, flip_count_prob=flip_count_prob)
     return loss, (mc_vals, td_vals)
 
 def pg_objective_func(pi_params: jnp.ndarray, amdp: AbstractMDP):

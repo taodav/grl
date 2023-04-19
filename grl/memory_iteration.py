@@ -15,9 +15,10 @@ from grl.utils.loss import discrep_loss
 from grl.vi import td_pe
 
 def run_memory_iteration(spec: dict,
+                         policy_optim_alg: str = 'policy_iter',
+                         optimizer_str: str = 'sgd',
                          pi_lr: float = 1.,
                          mi_lr: float = 1.,
-                         policy_optim_alg: str = 'policy_iter',
                          mi_iterations: int = 1,
                          mi_steps: int = 50000,
                          pi_steps: int = 50000,
@@ -25,6 +26,8 @@ def run_memory_iteration(spec: dict,
                          error_type: str = 'l2',
                          value_type: str = 'q',
                          objective: str = 'discrep',
+                         lambda_0: float = 0.,
+                         lambda_1: float = 1.,
                          alpha: float = 1.,
                          pi_params: jnp.ndarray = None,
                          epsilon: float = 0.1,
@@ -43,6 +46,9 @@ def run_memory_iteration(spec: dict,
     :param mi_steps:            Number of memory improvement steps PER memory iteration step.
     :param pi_steps:            Number of policy improvement steps PER memory iteration step.
     :param flip_count_prob:     Do we flip our count probabilities over observations for memory loss?.
+    :param lambda_0:            What's our first lambda parameter for lambda discrep?
+    :param lambda_1:            What's our second lambda parameter for lambda discrep?
+    :param alpha:               How uniform do we want our lambda discrep weighting?
     """
     assert 'mem_params' in spec.keys() and spec['mem_params'] is not None
     mem_params = spec['mem_params']
@@ -51,6 +57,7 @@ def run_memory_iteration(spec: dict,
     amdp = AbstractMDP(mdp, spec['phi'])
     assert amdp.current_state is None, \
         f"AbstractMDP should be stateless and current_state should be None, got {amdp.current_state} instead"
+
 
     # initialize policy params
     if 'Pi_phi' not in spec or spec['Pi_phi'] is None:
@@ -67,20 +74,23 @@ def run_memory_iteration(spec: dict,
     initial_policy = softmax(pi_params, axis=-1)
 
     agent = AnalyticalAgent(pi_params,
+                            optimizer_str,
                             rand_key,
+                            pi_lr=pi_lr,
+                            mi_lr=mi_lr,
                             mem_params=mem_params,
                             policy_optim_alg=policy_optim_alg,
                             error_type=error_type,
                             value_type=value_type,
                             objective=objective,
+                            lambda_0=lambda_0,
+                            lambda_1=lambda_1,
                             alpha=alpha,
                             epsilon=epsilon,
                             flip_count_prob=flip_count_prob)
 
     info, agent = memory_iteration(agent,
                                    amdp,
-                                   pi_lr=pi_lr,
-                                   mi_lr=mi_lr,
                                    mi_iterations=mi_iterations,
                                    pi_per_step=pi_steps,
                                    mi_per_step=mi_steps,
@@ -129,8 +139,6 @@ def run_memory_iteration(spec: dict,
 def memory_iteration(
     agent: AnalyticalAgent,
     init_amdp: AbstractMDP,
-    pi_lr: float = 1.,
-    mi_lr: float = 1,
     pi_per_step: int = 50000,
     mi_per_step: int = 50000,
     mi_iterations: int = 1,
@@ -163,7 +171,7 @@ def memory_iteration(
         # Change modes, run policy iteration
         agent.policy_optim_alg = 'policy_iter'
         print(f"Calculating TD-optimal memoryless policy over {pi_per_step} steps")
-        pi_improvement(agent, init_amdp, lr=pi_lr, iterations=pi_per_step, log_every=log_every)
+        pi_improvement(agent, init_amdp, iterations=pi_per_step, log_every=log_every)
         info['td_optimal_memoryless_policy'] = agent.policy.copy()
         print(f"Converged to TD-optimal memoryless policy: \n{agent.policy}\n")
 
@@ -176,7 +184,6 @@ def memory_iteration(
         print("Initial policy improvement step")
         initial_outputs = pi_improvement(agent,
                                          init_amdp,
-                                         lr=pi_lr,
                                          iterations=pi_per_step,
                                          log_every=log_every)
         info['policy_improvement_outputs'].append(initial_outputs)
@@ -200,7 +207,6 @@ def memory_iteration(
             print(f"Start MI {mem_it}")
             mem_loss = mem_improvement(agent,
                                        init_amdp,
-                                       lr=mi_lr,
                                        iterations=mi_per_step,
                                        log_every=log_every)
             info['mem_loss'].append(mem_loss)
@@ -219,7 +225,6 @@ def memory_iteration(
             # Now we improve our policy again
             policy_output = pi_improvement(agent,
                                            amdp,
-                                           lr=pi_lr,
                                            iterations=pi_per_step,
                                            log_every=log_every)
             info['policy_improvement_outputs'].append(policy_output)
@@ -240,7 +245,7 @@ def memory_iteration(
         # Change modes, run policy iteration
         agent.policy_optim_alg = 'policy_iter'
         print("Final policy improvement, after λ-discrep. optimization.")
-        pi_improvement(agent, final_amdp, lr=pi_lr, iterations=pi_per_step, log_every=log_every)
+        pi_improvement(agent, final_amdp, iterations=pi_per_step, log_every=log_every)
 
         # Plotting for final policy iteration
         print(f"Learnt policy for final policy iteration: \n"
@@ -257,7 +262,6 @@ def memory_iteration(
 
 def pi_improvement(agent: AnalyticalAgent,
                    amdp: AbstractMDP,
-                   lr: float = 1.,
                    iterations: int = 10000,
                    log_every: int = 1000,
                    progress_bar: bool = True) -> dict:
@@ -274,7 +278,7 @@ def pi_improvement(agent: AnalyticalAgent,
     if progress_bar:
         to_iterate = trange(iterations)
     for it in to_iterate:
-        output = agent.policy_improvement(amdp, lr)
+        output = agent.policy_improvement(amdp)
         if it % log_every == 0:
             if agent.policy_optim_alg == 'policy_grad':
                 print(f"initial state value for iteration {it}: {output['v_0'].item():.4f}")
@@ -286,7 +290,6 @@ def pi_improvement(agent: AnalyticalAgent,
 
 def mem_improvement(agent: AnalyticalAgent,
                     amdp: AbstractMDP,
-                    lr: float = 1.,
                     iterations: int = 10000,
                     log_every: int = 1000,
                     progress_bar: bool = True) -> np.ndarray:
@@ -298,7 +301,7 @@ def mem_improvement(agent: AnalyticalAgent,
     if progress_bar:
         to_iterate = trange(iterations)
     for it in to_iterate:
-        loss = agent.memory_improvement(amdp, lr)
+        loss = agent.memory_improvement(amdp)
         if it % log_every == 0:
             print(f"Memory improvement loss for step {it}: {loss.item():.4f}")
             memory_losses.append(loss.item())
