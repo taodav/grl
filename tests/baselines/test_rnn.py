@@ -98,8 +98,45 @@ def test_lstm_5len_tmaze():
     assert train_logs["final_pct_success"] >= 0.95
     assert train_logs["avg_len"][-1] < 10.
 
+def test_lstm_cheese():
+    spec = environment.load_spec("cheese.95")
+    trunc_len = 100
+    n_hidden = 12
+
+    n_eps = 1.5e5
+
+    print(f"Testing LSTM with Sequential SARSA on Cheese maze over {n_eps} episodes")
+    mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
+    pomdp = AbstractMDP(mdp, spec['phi'])
+
+    def _lstm_func(x: jnp.ndarray, h: hk.LSTMState):
+        module = ManagedLSTM(n_hidden, pomdp.n_actions)
+        return module(x, h)
+    
+    transformed = hk.without_apply_rng(hk.transform(_lstm_func))
+
+    rand_key = random.PRNGKey(2023)
+    rand_key, subkey = random.split(rand_key)
+    agent_args = DQNArgs((pomdp.n_obs,), 
+                         pomdp.n_actions, 
+                         pomdp.gamma, 
+                         subkey, 
+                         algo = "sarsa", 
+                         trunc_len=trunc_len, 
+                         alpha=0.001, 
+                         epsilon=0.1,
+                         epsilon_start=1.,
+                         anneal_steps=n_eps / 2)
+    agent = LSTMAgent(transformed, n_hidden, agent_args)
+
+    train_logs, agent_args = train_rnn_agent(pomdp, agent, n_eps)
+
+    assert train_logs["final_pct_success"] >= 0.95
+    assert train_logs["avg_len"][-1] < 10.
+
     
 if __name__ == "__main__":
-    test_lstm_chain_pomdp()
-    test_lstm_5len_tmaze()
+    # test_lstm_chain_pomdp()
+    # test_lstm_5len_tmaze()
+    test_lstm_cheese()
 

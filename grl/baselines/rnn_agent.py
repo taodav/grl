@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import haiku as hk
 import optax
+import dill
 from functools import partial
 from jax import random, jit, vmap
 from optax import sgd
@@ -206,7 +207,8 @@ class LSTMAgent(DQNAgent):
 def train_rnn_agent(mdp: MDP,
                     agent: DQNAgent,
                     total_eps: int,
-                    zero_obs = False):
+                    zero_obs = False,
+                    save_path = None):
     """
     Training loop for a dqn agent.
     :param mdp: mdp to train on. Currently DQN does not support AMDPs.
@@ -237,7 +239,7 @@ def train_rnn_agent(mdp: MDP,
     losses = []
     pct_success = 0.
     avg_len = 0.
-    while (num_eps < total_eps):
+    while (num_eps <= total_eps):
         # episode buffers
         all_obs, all_actions, terminals, rewards = [], [], [], []
         agent.reset()
@@ -306,6 +308,9 @@ def train_rnn_agent(mdp: MDP,
             episode_lengths = []
 
             losses.append(loss)
+            if save_path:
+                with open(str(save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
+                    dill.dump(agent, dill_file)
             print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
         
         num_eps = num_eps + 1

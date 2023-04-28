@@ -10,3 +10,4 @@ onager
 optuna==3.1.0
 optax
 dm-haiku
+dill

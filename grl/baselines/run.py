@@ -1,16 +1,14 @@
 import argparse
 import logging
 import pathlib
-from time import time
 import haiku as hk
-
 import numpy as np
 import jax
 from jax import random
 from jax.config import config
+from time import time
 
 from grl.environment import load_spec
-from grl.environment.policy_lib import get_start_pi
 from grl.utils.file_system import results_path, numpyify_and_save
 from grl.run import add_tmaze_hyperparams
 from grl.baselines import DQNArgs, SimpleNN, ManagedLSTM
@@ -100,6 +98,10 @@ if __name__ == '__main__':
     logging.info(f'phi:\n {spec["phi"]}')
 
     results_path = results_path(args)
+    agents_dir = results_path.parent / 'agents'
+    agents_dir.mkdir(exist_ok=True)
+
+    agents_path = agents_dir / f'{results_path.stem}'
 
     logs, agent = None, None
     if args.algo == 'dqn_sarsa':
@@ -144,7 +146,7 @@ if __name__ == '__main__':
                             anneal_steps=args.epsilon_anneal_steps)
         agent = LSTMAgent(transformed, args.hidden_size, agent_args)
 
-        train_logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
+        train_logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates, save_path = agents_path)
 
     else:
         raise NotImplementedError(f"Error: baseline algorithm {args.algo} not recognized")
@@ -152,11 +154,7 @@ if __name__ == '__main__':
 
 
     info = {'logs': logs, 'args': args.__dict__}
-    agents_dir = results_path.parent / 'agents'
-    agents_dir.mkdir(exist_ok=True)
-
-    agents_path = agents_dir / f'{results_path.stem}.pkl'
-    # TODO can't pickle transformed haiku functions - maybe try https://github.com/deepmind/dm-haiku/issues/59#issuecomment-662091929 ?
+    
     #np.save(agents_path, agent)
 
     end_time = time()
