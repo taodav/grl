@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import jax.random as random
 import haiku as hk
 import numpy as np
+from pathlib import Path
 
 @dataclass
 class DQNArgs:
@@ -17,7 +18,9 @@ class DQNArgs:
     alpha: float = 0.01
     algo: str = "sarsa"
     trunc_len: int = None
-    init_hidden_var = 0.
+    init_hidden_var: float = 0.
+    save_path: Path = None
+    gamma_terminal: bool = False
 
 class SimpleNN(hk.Module):
     def __init__(self, input_size, output_size, name='basic_mlp'):

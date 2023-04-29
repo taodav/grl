@@ -15,6 +15,7 @@ hparams = {
             # 'hallway',
             #'po_simple_chain'
         ],
+        'gamma_terminal': True,
         'num_updates': int(1.5e5),
         'start_epsilon': 1.,
         'epsilon': 0.1,

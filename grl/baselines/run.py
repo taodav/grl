@@ -33,6 +33,8 @@ if __name__ == '__main__':
                         help='Baseline algorithm to evaluate')
     parser.add_argument('--hidden_size', default=12, type=int,
                         help='For RNNs: hidden size to use.')
+    parser.add_argument('--gamma_terminal', action='store_true', default=False,
+                        help='Terminate episodes early with probability (1-gamma)?')
     parser.add_argument('--trunc_len', default=10, type=int,
                         help='For RNNs: backprop truncation window size. Currently not used.')
     parser.add_argument('--num_updates', default=1e5, type=int,
@@ -143,10 +145,12 @@ if __name__ == '__main__':
                             alpha=args.alpha, 
                             epsilon=args.epsilon,
                             epsilon_start=args.start_epsilon,
-                            anneal_steps=args.epsilon_anneal_steps)
+                            anneal_steps=args.epsilon_anneal_steps,
+                            gamma_terminal = args.gamma_terminal,
+                            save_path = agents_path,)
         agent = LSTMAgent(transformed, args.hidden_size, agent_args)
 
-        train_logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates, save_path = agents_path)
+        train_logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
 
     else:
         raise NotImplementedError(f"Error: baseline algorithm {args.algo} not recognized")

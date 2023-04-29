@@ -207,8 +207,7 @@ class LSTMAgent(DQNAgent):
 def train_rnn_agent(mdp: MDP,
                     agent: DQNAgent,
                     total_eps: int,
-                    zero_obs = False,
-                    save_path = None):
+                    zero_obs = False):
     """
     Training loop for a dqn agent.
     :param mdp: mdp to train on. Currently DQN does not support AMDPs.
@@ -257,7 +256,7 @@ def train_rnn_agent(mdp: MDP,
         # For PR: is this functionality that we want to make optional?
         #for _ in range(agent.trunc_len):
         while not done:
-            o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=False)
+            o_1, r_0, done, _, _ = mdp.step(a_0, gamma_terminal=args.gamma_terminal)
             terminals.append(done)
             rewards.append(r_0)
             steps = steps + 1  
@@ -308,8 +307,8 @@ def train_rnn_agent(mdp: MDP,
             episode_lengths = []
 
             losses.append(loss)
-            if save_path:
-                with open(str(save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
+            if args.save_path:
+                with open(str(args.save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
                     dill.dump(agent, dill_file)
             print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
         
