@@ -18,8 +18,8 @@ from typing import Tuple
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
-from .dqn_agent import DQNAgent, mse
-from . import DQNArgs
+from .dqn_agent import DQNAgent
+from . import DQNArgs, mse
 
 # error func from David's impl
 def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, next_a: jnp.ndarray):
@@ -327,4 +327,3 @@ def train_rnn_agent(mdp: MDP,
             "final_pi": final_policy,
             "final_q": final_q}
     return info, agent
-        

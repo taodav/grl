@@ -4,6 +4,7 @@ import jax.random as random
 import haiku as hk
 import numpy as np
 from pathlib import Path
+import jax.numpy as jnp
 
 @dataclass
 class DQNArgs:
@@ -21,6 +22,14 @@ class DQNArgs:
     init_hidden_var: float = 0.
     save_path: Path = None
     gamma_terminal: bool = False
+
+
+def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
+    if targets is None:
+        targets = jnp.zeros_like(predictions)
+    squared_diff = 0.5 * (predictions - targets) ** 2
+    return jnp.mean(squared_diff)
+
 
 class SimpleNN(hk.Module):
     def __init__(self, input_size, output_size, name='basic_mlp'):

@@ -10,11 +10,11 @@ import optax
 from functools import partial
 from jax import random, jit, vmap
 from optax import sgd
-from typing import Tuple, Union
+from typing import Tuple
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
-from . import DQNArgs
+from . import DQNArgs, mse
 
 # Error functions from David's impl
 def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
@@ -40,14 +40,6 @@ def qlearning_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.nd
     target = r + g * q1.max()
     target = jax.lax.stop_gradient(target)
     return q[a] - target
-
-def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
-    if targets is None:
-        targets = jnp.zeros_like(predictions)
-    squared_diff = 0.5 * (predictions - targets) ** 2
-    return jnp.mean(squared_diff)
-
-
 
 
 class DQNAgent:
@@ -269,13 +261,3 @@ def train_dqn_agent(mdp: MDP,
             "final_q": q}
 
     return info, agent
-        
-
-
-
-            
-
-
-
-
-
