@@ -4,9 +4,8 @@ from pathlib import Path
 exp_name = Path(__file__).stem
 game_name = 'prisoners_dilemma'
 
-# leader_policies = ['tit_for_tat', 'extort', 'grudger2', 'majority3',
-#                    'treasure_hunt', 'all_d', 'all_c', 'sugar', 'alternator']
-leader_policies = ['all_c', 'sugar', 'alternator']
+leader_policies = ['tit_for_tat', 'extort', 'grudger2', 'majority3',
+                   'treasure_hunt', 'all_d', 'all_c', 'sugar', 'alternator']
 
 hparams = {
     'file_name':
@@ -23,6 +22,7 @@ hparams = {
         'mi_steps': 5000,
         'pi_steps': 5000,
         'init_pi': 0,
+        'n_mem_states': [2, 4, 8]
         'error_type': 'l2',
         'optimizer': 'adam',
         'lr': 0.01,
