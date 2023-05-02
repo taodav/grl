@@ -19,10 +19,10 @@ def prisoners_dilemma_tit_for_tat(episode_duration: int = 10):
 
     R = np.array(
         [
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
+            [3, 5, 0, 1],
+            [3, 5, 0, 1],
+            [3, 5, 0, 1],
+            [3, 5, 0, 1],
         ]
     )
     R = np.array([R, R])
@@ -49,7 +49,7 @@ def prisoners_dilemma_tit_for_tat(episode_duration: int = 10):
 
     return to_dict(T, R, gamma, p0, phi, Pi_phi)
 
-def prisoners_dilemma_extort(episode_duration: int = 100):
+def prisoners_dilemma_extort(episode_duration: int = 10):
     T_c = np.array([
         [7/8, 1/8, 0, 0],
         [7/16, 1 - 7/16, 0, 0],
@@ -65,10 +65,10 @@ def prisoners_dilemma_extort(episode_duration: int = 100):
     T = np.array([T_c, T_d])
     R = np.array(
         [
-            [0, -10, 10, 0],
-            [0, -10, 10, 0],
-            [0, -10, 10, 0],
-            [0, -10, 10, 0],
+            [3, 5, 0, 1],
+            [3, 5, 0, 1],
+            [3, 5, 0, 1],
+            [3, 5, 0, 1],
         ]
     )
 
@@ -427,15 +427,15 @@ def prisoners_dilemma_alternator(episode_duration: int = 10):
         [0, 0, 1, 0, 0],
         [0, 0, 0, 1, 0],
         [0, 0, 0, 1, 0],
-        [0, 0, 1, 0, 0]
         [0, 0, 1, 0, 0],
+        [0, 0, 1, 0, 0]
 
     ])
     T_d = np.array([
         [0, 1, 0, 0, 0],
         [0, 0, 0, 0, 1],
         [0, 0, 0, 0, 1],
-        [0, 1, 0, 0, 0]
+        [0, 1, 0, 0, 0],
         [0, 1, 0, 0, 0]
 
     ])
@@ -443,12 +443,10 @@ def prisoners_dilemma_alternator(episode_duration: int = 10):
 
     R = np.array(
         [
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
+            [0, 0, 3, 0, 0],
         ]
     )
+    R = R.repeat(R.shape[-1], axis=0)
     R = np.array([R, R])
 
     p0 = np.zeros(len(T[0]))
@@ -500,12 +498,10 @@ def prisoners_dilemma_sugar(episode_duration: int = 10):
 
     R = np.array(
         [
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
-            [-2, 0, -10, -5],
+            [0, 1, 0, 1, 0, 3, 5],
         ]
     )
+    R = R.repeat(R.shape[-1], axis=0)
     R = np.array([R, R])
 
     p0 = np.zeros(len(T[0]))
