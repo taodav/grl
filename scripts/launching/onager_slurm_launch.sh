@@ -2,9 +2,9 @@ cd ../../
 
 onager launch \
     --backend slurm \
-    --jobname sample_based_tmaze_sweep_eps \
-    --mem 3 \
-    --cpus 3 \
-    --duration 1-00:00:00 \
+    --jobname prisoners_dilemma \
+    --mem 2 \
+    --cpus 2 \
+    --duration 0-03:00:00 \
     --venv venv \
 #    --tasks-per-node 4 \
