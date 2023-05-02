@@ -22,7 +22,7 @@ hparams = {
         'mi_steps': 5000,
         'pi_steps': 5000,
         'init_pi': 0,
-        'n_mem_states': [2, 4, 8]
+        'n_mem_states': [2, 4, 8],
         'error_type': 'l2',
         'optimizer': 'adam',
         'lr': 0.01,
