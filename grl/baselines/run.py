@@ -150,7 +150,7 @@ if __name__ == '__main__':
                             save_path = agents_path,)
         agent = LSTMAgent(transformed, args.hidden_size, agent_args)
 
-        train_logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
+        logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
 
     else:
         raise NotImplementedError(f"Error: baseline algorithm {args.algo} not recognized")
