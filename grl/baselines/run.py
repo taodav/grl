@@ -16,7 +16,6 @@ from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
 from grl.baselines.rnn_agent import LSTMAgent, train_rnn_agent
 from grl import MDP, AbstractMDP
 
-
 if __name__ == '__main__':
     start_time = time()
 
@@ -25,7 +24,7 @@ if __name__ == '__main__':
     # yapf:disable
     parser.add_argument('--spec', default='example_11', type=str,
         help='name of POMDP spec')
-    
+
 
     # TODO more from grl.run? more of my own?
 
@@ -42,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', default=0.001, type=float)
     parser.add_argument('--epsilon', default=0.1, type=float,
                         help='What (ending, if annealing) epsilon do we use?')
-    parser.add_argument('--start_epsilon', default=1., type=float,
+    parser.add_argument('--start_epsilon', default=None, type=float,
                         help='For epsilon annealing: What starting epsilon to use?')
     parser.add_argument('--epsilon_anneal_steps', default=0, type=int,
                         help='For epsilon annealing: anneal over how many steps?')
@@ -87,10 +86,10 @@ if __name__ == '__main__':
                      discount=args.tmaze_discount,
                      junction_up_pi=args.tmaze_junction_up_pi,
                      epsilon=args.epsilon)
-    
+
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
     pomdp = AbstractMDP(mdp, spec['phi'])
-    
+
 
     logging.info(f'spec:\n {args.spec}\n')
     logging.info(f'T:\n {spec["T"]}')
@@ -113,11 +112,11 @@ if __name__ == '__main__':
             return module(x)
         transformed = hk.without_apply_rng(hk.transform(_nn_func))
 
-        
-        agent_args = DQNArgs((mdp.n_obs,), 
+
+        agent_args = DQNArgs((mdp.n_obs,),
                              mdp.n_actions,
-                             mdp.gamma, 
-                             rand_key, 
+                             mdp.gamma,
+                             rand_key,
                              algo = "sarsa",
                              epsilon = args.epsilon,
                              anneal_steps=args.epsilon_anneal_steps,
@@ -131,18 +130,18 @@ if __name__ == '__main__':
         def _lstm_func(x, h):
             module = ManagedLSTM(args.hidden_size, pomdp.n_actions)
             return module(x, h)
-        
+
         transformed = hk.without_apply_rng(hk.transform(_lstm_func))
 
         rand_key = random.PRNGKey(2023)
         rand_key, subkey = random.split(rand_key)
-        agent_args = DQNArgs((pomdp.n_obs,), 
-                            pomdp.n_actions, 
-                            pomdp.gamma, 
-                            subkey, 
-                            algo = "sarsa", 
-                            trunc_len=args.trunc_len, 
-                            alpha=args.alpha, 
+        agent_args = DQNArgs((pomdp.n_obs,),
+                            pomdp.n_actions,
+                            pomdp.gamma,
+                            subkey,
+                            algo = "sarsa",
+                            trunc_len=args.trunc_len,
+                            alpha=args.alpha,
                             epsilon=args.epsilon,
                             epsilon_start=args.start_epsilon,
                             anneal_steps=args.epsilon_anneal_steps,
@@ -158,7 +157,7 @@ if __name__ == '__main__':
 
 
     info = {'logs': logs, 'args': args.__dict__}
-    
+
     #np.save(agents_path, agent)
 
     end_time = time()
@@ -167,5 +166,3 @@ if __name__ == '__main__':
 
     #print(f"Saving results to {results_path}")
     numpyify_and_save(results_path, info)
-
-

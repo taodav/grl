@@ -15,7 +15,7 @@ class DQNArgs:
     epsilon: float = 0.1
     epsilon_start: float = 1.
     anneal_steps: int = 0
-    optimizer: str = "sgd"
+    optimizer: str = "adam"
     alpha: float = 0.01
     algo: str = "sarsa"
     trunc_len: int = None
@@ -23,25 +23,22 @@ class DQNArgs:
     save_path: Path = None
     gamma_terminal: bool = False
 
-
 def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
     if targets is None:
         targets = jnp.zeros_like(predictions)
-    squared_diff = 0.5 * (predictions - targets) ** 2
+    squared_diff = 0.5 * (predictions - targets)**2
     return jnp.mean(squared_diff)
-
 
 class SimpleNN(hk.Module):
     def __init__(self, input_size, output_size, name='basic_mlp'):
         super().__init__(name=name)
-        self._internal_linear_1 = hk.nets.MLP([input_size, output_size], 
-                                              w_init=hk.initializers.RandomUniform(), 
+        self._internal_linear_1 = hk.nets.MLP([input_size, output_size],
+                                              w_init=hk.initializers.RandomUniform(),
                                               b_init=hk.initializers.RandomUniform(),
                                               name='hk_linear')
 
     def __call__(self, x):
         return self._internal_linear_1(x)
-
 
 class ManagedLSTM(hk.Module):
     """
@@ -52,14 +49,13 @@ class ManagedLSTM(hk.Module):
         init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
         b_init = hk.initializers.Constant(0)
         self._lstm = hk.LSTM(hidden_size)
-        
-        self._linear = hk.Linear(output_size, w_init=init, b_init = b_init)
+
+        self._linear = hk.Linear(output_size, w_init=init, b_init=b_init)
 
     def __call__(self, x, h):
         # initial_state = jnp.zeros(initial_state.shape)
         outputs, cell_state = hk.dynamic_unroll(self._lstm, x, h, time_major=False)
         return hk.BatchApply(self._linear)(outputs), cell_state
-    
 
 # TODO currently unused
 class SimpleGRU(hk.Module):
@@ -67,12 +63,9 @@ class SimpleGRU(hk.Module):
         super().__init__(name=name)
         init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
         b_init = hk.initializers.Constant(0)
-        self._lstm = hk.GRU(hidden_size, w_i_init=init, 
-                        w_h_init=init, 
-                        b_init=b_init)
-        
-        self._linear = hk.Linear(output_size, w_init=init, b_init = b_init)
-        
+        self._lstm = hk.GRU(hidden_size, w_i_init=init, w_h_init=init, b_init=b_init)
+
+        self._linear = hk.Linear(output_size, w_init=init, b_init=b_init)
 
     def __call__(self, x):
         batch_size = x.shape[0]
@@ -80,4 +73,3 @@ class SimpleGRU(hk.Module):
         # initial_state = jnp.zeros(initial_state.shape)
         outputs, cell_state = hk.dynamic_unroll(self._lstm, x, initial_state, time_major=False)
         return hk.BatchApply(self._linear)(outputs), cell_state
-        

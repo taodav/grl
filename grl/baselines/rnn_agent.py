@@ -13,7 +13,7 @@ import optax
 import dill
 from functools import partial
 from jax import random, jit, vmap
-from optax import sgd
+from optax import sgd, adam
 from typing import Tuple
 from grl import MDP
 from grl.utils.batching import JaxBatch
@@ -59,6 +59,8 @@ class LSTMAgent(DQNAgent):
                                                 h=self.hidden_state)
         if args.optimizer == "sgd":
             self.optimizer = sgd(args.alpha)
+        elif args.optimizer == "adam":
+            self.optimizer = adam(args.alpha)
         else:
             raise NotImplementedError(f"Unrecognized optimizer {args.optimizer}")
         self.optimizer_state = self.optimizer.init(self.network_params)

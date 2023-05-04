@@ -1,7 +1,8 @@
 hparams = {
     'file_name':
         'po_simple_chain_lstm.txt',
-    'entry': 'grl.baselines.run',
+    'entry':
+        '-m grl.baselines.run',
     'args': [{
         'algo': 'lstm_sarsa',
         'spec': [
@@ -14,10 +15,9 @@ hparams = {
             # 'hallway',
             'po_simple_chain'
         ],
-        'num_updates': int(1.5e5),
-        'start_epsilon': 1.,
+        'num_updates': int(1e3),
+        'start_epsilon': 0.1,
         'epsilon': 0.1,
-        'epsilon_anneal_steps': int(1.5e5 / 4),
         'alpha': 0.01,
         'trunc_len': 100, # currently unused
         'seed': [2020 + i for i in range(10)],
