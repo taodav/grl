@@ -455,10 +455,11 @@ def prisoners_dilemma_alternator(episode_duration: int = 10):
     p0[1] = 1
 
     phi = np.array([
-        [1, 0],
-        [1, 0],
-        [0, 1],
-        [0, 1],
+        [1, 0, 0],
+        [0, 0, 1],
+        [0, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
     ])
 
     p = 2/3
@@ -511,10 +512,13 @@ def prisoners_dilemma_sugar(episode_duration: int = 10):
     p0[1] = 1
 
     phi = np.array([
-        [1, 0],
-        [1, 0],
-        [0, 1],
-        [0, 1],
+        [1, 0, 0],
+        [0, 0, 1],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
     ])
 
     p = 2/3
