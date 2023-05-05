@@ -368,6 +368,7 @@ def prisoners_dilemma_all_d(episode_duration: int = 10):
     Pi_phi = [
         np.array([
             [p, 1 - p], # up, down
+            [p, 1 - p], # up, down
             [1 - p, p],
         ]),
     ]
@@ -411,6 +412,7 @@ def prisoners_dilemma_all_c(episode_duration: int = 10):
     p = 2/3
     Pi_phi = [
         np.array([
+            [p, 1 - p], # up, down
             [p, 1 - p], # up, down
             [1 - p, p],
         ]),
@@ -462,6 +464,7 @@ def prisoners_dilemma_alternator(episode_duration: int = 10):
     p = 2/3
     Pi_phi = [
         np.array([
+            [p, 1 - p], # up, down
             [p, 1 - p], # up, down
             [1 - p, p],
         ]),
@@ -517,6 +520,7 @@ def prisoners_dilemma_sugar(episode_duration: int = 10):
     p = 2/3
     Pi_phi = [
         np.array([
+            [p, 1 - p], # up, down
             [p, 1 - p], # up, down
             [1 - p, p],
         ]),
