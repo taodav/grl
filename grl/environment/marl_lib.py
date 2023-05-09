@@ -293,7 +293,7 @@ def prisoners_dilemma_treasure_hunt(episode_duration: int = 10):
 
     R = np.array(
         [
-            [0, 0, 3, 1, 5, 0, 3, 1, 5, 0, 3, 1, 3, 0],
+            [0, 0, 3, 1, 0, 5, 3, 1, 0, 0, 3, 1, 3, 5],
         ]
     )
     R = R.repeat(R.shape[-1], axis=0)
@@ -348,9 +348,9 @@ def prisoners_dilemma_all_d(episode_duration: int = 10):
 
     R = np.array(
         [
-            [0, 1, 5],
-            [0, 1, 5],
-            [0, 1, 5],
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 1, 0],
         ]
     )
     R = np.array([R, R])
@@ -393,9 +393,9 @@ def prisoners_dilemma_all_c(episode_duration: int = 10):
 
     R = np.array(
         [
-            [0, 0, 3],
-            [0, 0, 3],
-            [0, 0, 3],
+            [0, 5, 3],
+            [0, 5, 3],
+            [0, 5, 3],
         ]
     )
     R = np.array([R, R])
@@ -445,7 +445,7 @@ def prisoners_dilemma_alternator(episode_duration: int = 10):
 
     R = np.array(
         [
-            [0, 0, 3, 0, 0],
+            [0, 5, 3, 0, 1],
         ]
     )
     R = R.repeat(R.shape[-1], axis=0)
