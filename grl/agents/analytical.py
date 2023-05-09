@@ -152,6 +152,7 @@ class AnalyticalAgent:
         old_pi_params_shape = self.pi_params.shape
 
         self.pi_params = self.pi_params.repeat(add_n_mem_states, axis=0)
+        self.pi_optim_state = self.pi_optim.init(self.pi_params)
 
         if self.new_mem_pi == 'random':
             # randomly init policy for new memory state
