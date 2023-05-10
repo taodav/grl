@@ -61,8 +61,40 @@ def test_reinforce_chain_pomdp():
           f"Logits: {last_policy_logits}\n")
     assert jnp.all(jnp.isclose(last_policy, test_batch[0], atol=0.0001))
 
+def test_reinforce_5len_tmaze():
+    spec = environment.load_spec("tmaze_5_two_thirds_up")
+    trunc_len = 100
+    n_hidden = 12
 
+    n_eps = 1e4
+
+    print(f"Testing LSTM with REINFORCE on 5-length T-maze over {n_eps} episodes with trunc length {trunc_len}")
+    mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
+    pomdp = AbstractMDP(mdp, spec['phi'])
+
+    def _lstm_func(x: jnp.ndarray, h: hk.LSTMState):
+        module = ManagedLSTM(n_hidden, pomdp.n_actions)
+        return module(x, h)
+    
+    transformed = hk.without_apply_rng(hk.transform(_lstm_func))
+
+    rand_key = random.PRNGKey(2023)
+    rand_key, subkey = random.split(rand_key)
+    agent_args = DQNArgs((pomdp.n_obs,), 
+                         pomdp.n_actions, 
+                         pomdp.gamma, 
+                         subkey, 
+                         algo = "reinforce", 
+                         trunc_len=trunc_len, 
+                         alpha=0.001)
+    agent = LSTMReinforceAgent(transformed, n_hidden, agent_args)
+
+    train_logs, agent_args = train_reinforce_agent(pomdp, agent, n_eps)
+
+    assert train_logs["final_pct_success"] >= 0.95
+    assert train_logs["avg_len"][-1] < 10.
 
 
 if __name__ == "__main__":
-    test_reinforce_chain_pomdp()
+    #test_reinforce_chain_pomdp()
+    test_reinforce_5len_tmaze()
