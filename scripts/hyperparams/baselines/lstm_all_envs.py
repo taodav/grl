@@ -1,18 +1,19 @@
 hparams = {
     'file_name':
         'lstm_all_envs.txt',
-    'entry': 'grl.baselines.run',
+    'entry':
+        '-m grl.baselines.run',
     'args': [{
         'algo': 'lstm_sarsa',
         'spec': [
-            'tiger-alt-start', 
+            'tiger-alt-start',
             'network',
             'tmaze_5_two_thirds_up',
-            'example_7', 
-            '4x3.95', 
+            'example_7',
+            '4x3.95',
             'cheese.95',
             'shuttle.95',
-            'paint.95'
+            'paint.95',
             'bridge-repair',
             'hallway',
         ],
@@ -24,6 +25,5 @@ hparams = {
         'alpha': 0.001,
         'trunc_len': 100, # currently unused
         'seed': [2020 + i for i in range(10)],
-        'log': None,
     }]
 }
