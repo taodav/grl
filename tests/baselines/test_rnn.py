@@ -16,7 +16,7 @@ from grl.baselines.rnn_agent import LSTMAgent, train_rnn_agent
 def test_lstm_chain_pomdp():
     chain_length = 10
     spec = environment.load_spec('po_simple_chain', memory_id=None)
-    n_eps = 6.5e4
+    n_eps = 5e3
     n_hidden = 1
 
     print(f"Testing LSTM with Sequential SARSA on Simple Chain MDP over {n_eps * chain_length} steps")
@@ -43,7 +43,7 @@ def test_lstm_chain_pomdp():
                          alpha=0.01)
     agent = LSTMAgent(transformed, n_hidden, agent_args)
 
-    _, agent = train_rnn_agent(pomdp, agent, n_eps, zero_obs=False)
+    _, agent = train_rnn_agent(pomdp, agent, n_eps)
 
 
     test_batch = jnp.array([[[1.],
@@ -59,7 +59,7 @@ def test_lstm_chain_pomdp():
 
     print(f"Calculated values: {v[0]}\n"
           f"Ground-truth values: {ground_truth_vals}")
-    assert jnp.all(jnp.isclose(v[0], ground_truth_vals, atol=0.02))
+    assert jnp.all(jnp.isclose(v[0], ground_truth_vals, atol=0.01))
 
 
 def test_lstm_5len_tmaze():
@@ -67,7 +67,7 @@ def test_lstm_5len_tmaze():
     trunc_len = 100
     n_hidden = 12
 
-    n_eps = 1.5e5
+    n_eps = 1.5e4
 
     print(f"Testing LSTM with Sequential SARSA on 5-length T-maze over {n_eps} episodes with trunc length {trunc_len}")
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
@@ -136,7 +136,7 @@ def test_lstm_cheese():
 
     
 if __name__ == "__main__":
-    # test_lstm_chain_pomdp()
-    # test_lstm_5len_tmaze()
+    test_lstm_chain_pomdp()
+    test_lstm_5len_tmaze()
     test_lstm_cheese()
 

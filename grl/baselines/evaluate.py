@@ -53,11 +53,11 @@ if __name__ == "__main__":
     p = ArgumentParser()
     p.add_argument("--agent", required=True, 
                    help="(relative from results directory) path to agent to evaluate")
-    p.add_argument("--env_spec", required=True,
+    p.add_argument("--spec", required=True,
                    help="Environment to evaluate on, e.g. 'cheese.95'")
     p.add_argument("--num_episodes", default=1000,
                    help="Number of episodes to perform evaluation on. Script reports average discounted return across episodes.")
-    p.add_argument("--gamma_terminal", default=True,
+    p.add_argument("--gamma_terminal", action='store_true',
                    help="Terminate episodes with probability (1-gamma) at each step?")
     
     args = p.parse_args()

@@ -1,8 +1,7 @@
 """
-SARSA agent that utilizes an RNN.
-Relies on haiku's recurrent API (https://dm-haiku.readthedocs.io/en/latest/api.html#recurrent).
-Also based on David Tao's implementation at https://github.com/taodav/uncertainty/blob/main/unc/agents/lstm.py .
+Agent that utilizes REINFORCE with a
 """
+
 import jax
 # from jax.config import config
 # config.update('jax_disable_jit', True)
@@ -18,29 +17,35 @@ from typing import Tuple
 from grl import AbstractMDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
-from .dqn_agent import DQNAgent
 from . import DQNArgs, mse
 
-# error func from David's impl
-def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, next_a: jnp.ndarray):
+def reinforce_error(a_t, r_t, logits, gamma):
     """
-    sequential version of sarsa loss
-    First axis of all tensors are the sequence length.
-    :return:
+    REINFORCE error function.
+    :param r_t: rewards at each step over entire trajectory, used to calculate return, (T x 1)
+    :param a_t: actions at each step over trajectory, (T x 1)
+    :param logits: output of policy preference network at each timestep. (T x num_actions)
+    :param gamma: discount factor (scalar)
+    :return error at each timestep (T x 1)
     """
-    q1_vals = q1[jnp.arange(next_a.shape[0]), next_a]
+    logprobs = jnp.log(jax.nn.softmax(logits))
+    p_a_t = logprobs[jnp.arange(logprobs.shape[0]), a_t]
+    
+    returns = []
+    for t in range(len(r_t)):
+        g_t = jnp.sum((gamma ** jnp.arange(len(r_t) - t)) * r_t[t:])
+        returns.append(g_t)
+    
+    returns = jax.lax.stop_gradient(jnp.array(returns))
 
-    target = r + g * q1_vals
-    target = jax.lax.stop_gradient(target)
+    return returns * p_a_t
 
-    q_vals = q[jnp.arange(a.shape[0]), a]
-    return q_vals - target
 
-class LSTMAgent(DQNAgent):
+
+class LSTMReinforceAgent():
     def __init__(self, network: hk.Transformed, n_hidden: int, 
                  args: DQNArgs):
         self.args = args
-        # Constructor similar to DQNAgent except that network needs to be an RNN
         # TODO this is hardcoded 1 in David's impl - should this be an arg?
         self.batch_size = 1
         # internalize args
@@ -64,11 +69,10 @@ class LSTMAgent(DQNAgent):
         else:
             raise NotImplementedError(f"Unrecognized optimizer {args.optimizer}")
         self.optimizer_state = self.optimizer.init(self.network_params)
-        self.eps = args.epsilon
 
         self.error_fn = None
-        if args.algo == 'sarsa':
-            self.error_fn = seq_sarsa_error
+        if args.algo == 'reinforce':
+            self.error_fn = reinforce_error
         else:
             raise NotImplementedError(f"Unrecognized learning algorithm {args.algo}")
         self.batch_error_fn = vmap(self.error_fn)
@@ -87,99 +91,63 @@ class LSTMAgent(DQNAgent):
 
     def reset(self):
         """
-        Reset LSTM hidden states.
+        Reset LSTM hidden states and internal logit buffer.
         :return:
         """
         self.hidden_state = self.get_initial_hidden_state()
 
-        
     def act(self, obs: jnp.ndarray) -> jnp.ndarray:
         """
-        Get next epsilon-greedy action given a obs, using the agent's parameters.
+        Get next action sampled from stochastic policy from network, as well as policy logits.
         :param obs: (batch x time_steps x obs_size) obs to find actions for. 
+        :return: tuple (action, logits): (batch x time_steps) actions, (batch x time_steps x num_actions) policy logits.
         """        
-        action, self.hidden_state, self._rand_key = self._functional_act(obs, self.hidden_state, self._rand_key, self.network_params, self.eps)        
+        action, self.hidden_state, self._rand_key = self._functional_act(obs, 
+                                                                                 self.hidden_state, 
+                                                                                 self._rand_key, 
+                                                                                 self.network_params)
         
         return action
     
     @partial(jit, static_argnums=0)
-    def _functional_act(self, obs, h, rand_key, network_params, epsilon):
-       policy, _ , new_hidden = self._functional_policy(obs, h, network_params, epsilon)
+    def _functional_act(self, obs, h, rand_key, network_params):
+       policy_probs, new_hidden = self.policy(network_params, h, obs)
        key, subkey = random.split(rand_key)
       
-       # TODO is there a better way? for some reason the following doesn't work
-       # action_choices = jnp.full((*exp_obs.shape[:-1], self.n_actions), jnp.arange(self.n_actions))
-       # action = random.choice(key=subkey, a=action_choices, p=policy, axis=-1, shape=(*exp_obs.shape[:-1], 1))
-       action = jnp.array([[]], dtype=jnp.int32)
-       for batch in range(policy.shape[0]):
-            actions_ts = []
-            for ts in range(policy.shape[1]):
-                key, subkey = random.split(key)
-                actions_ts.append(random.choice(key=subkey, a = jnp.arange(self.n_actions), p=policy[batch][ts]))
-            action = jnp.append(action, jnp.array([actions_ts]), axis=-1)
+       action = jax.random.categorical(subkey, jnp.log(policy_probs), axis=-1)
        return action, new_hidden, key
 
-    def policy(self, h: hk.LSTMState, obs: jnp.ndarray):
-        """
-        Get policy from agent's saved parameters at the given obs.
-        :param obs: (batch x time_steps x obs_size) obs(s) to find actions for.
-        """
-        return self._functional_policy(obs, h, self.network_params, self.eps)
-
     @partial(jit, static_argnums=0)
-    def _functional_policy(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params, epsilon: float) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        probs = jnp.zeros((*obs.shape[:-1], self.n_actions)) + epsilon / self.n_actions
-        greedy_idx, qs, new_h = self._greedy_act(obs, h, network_params)
-        # TODO I genuinely don't know a better/more efficient way to do this ATM - suggestions very welcome!
-        for batch in range(probs.shape[0]):
-            for ts in range(probs.shape[1]):
-                probs = probs.at[(batch, ts, greedy_idx[batch][ts])].add(1 - epsilon)
-        return probs, qs, new_h
-
-
-    @partial(jit, static_argnums=0)
-    def _greedy_act(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def policy(self, network_params: hk.Params, h: hk.LSTMState, obs: jnp.ndarray):
         """
-        Get greedy actions given a obs
-        :param obs: (b x time_steps x *obs.shape) obs to find actions
-        :param network_params: NN parameters to use to calculate Q.
-        :return: (b x time_steps) Greedy actions
+        Get policy given a obs.
+        :param network_params: parameters of network to query for policy
+        :param h: Hidden state of model to use for query
+        :param obs: (b x time_steps x *obs.shape) obs to find policy
+        :return: (b x time_steps x actions) torch.tensor full of policies.
         """
-        qs, new_h = self.Qs(obs, h, network_params)
-        return jnp.argmax(qs, -1), qs, new_h
+        logits, new_h = self.policy_logits(network_params, h, obs)
+        return jax.nn.softmax(logits, axis=-1), new_h
+        
 
-    
-    def Qs(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
+    def policy_logits(self, network_params: hk.Params, h: hk.LSTMState, obs: jnp.ndarray):
         """
-        Get all Q-values given a obs.
-        :param obs: (b x time_steps x *obs.shape) obs to find action-values
-        :param model: Optional. Potenially use another model
-        :return: (b x time_steps x actions) torch.tensor full of action-values.
+        Get policy preferences (logits) given a obs.
+        :param network_params: parameters of network to query for policy
+        :param h: Hidden state of model to use for query
+        :param obs: (b x time_steps x *obs.shape) obs to find policy
+        :return: Tuple: (b x time_steps x actions) torch.tensor full of policy preference logits, cell state.
         """
         return self.network.apply(network_params, obs, h)
-
-    def Q(self, obs: jnp.ndarray, action: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
-        """
-        Get action-values given a obs and action
-        :param obs: (b x time_steps x *obs.shape) obs to find action-values
-        :param action: (b x time_steps) Actions for action-values
-        :param network_params: NN parameters to use to calculate Q 
-        :return: (b x time_steps) Action-values
-        """
-        qs = self.Qs(obs, h, network_params)
-        return qs[jnp.arange(action.shape[0]), action]
-    
+        
     def _loss(self, network_params: hk.Params,
              initial_hidden: hk.LSTMState,
              batch: JaxBatch):
         #(B x T x A)
-        q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
-        q_s0 = q_all[:, :-1, :]
-        q_s1 = q_all[:, 1:, :]
+        obs_policy_logits, _ = self.policy_logits(network_params, initial_hidden, batch.obs)
     
-
-        td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)
-        return mse(td_err)
+        returns_scaled = self.batch_error_fn(batch.actions, batch.rewards, obs_policy_logits, jnp.full((batch.obs.shape[0],), self.gamma))
+        return -jnp.sum(returns_scaled)
 
     @partial(jit, static_argnums=0)
     def functional_update(self,
@@ -205,28 +173,21 @@ class LSTMAgent(DQNAgent):
         loss, self.network_params, self.optimizer_state = \
             self.functional_update(self.network_params, self.optimizer_state, self.get_initial_hidden_state(), batch)
         return loss
+
     
-def train_rnn_agent(amdp: AbstractMDP,
-                    agent: LSTMAgent,
+def train_reinforce_agent(amdp: AbstractMDP,
+                    agent: LSTMReinforceAgent,
                     total_eps: int):
     """
     Training loop for an rnn agent.
     :param amdp: AbstractMDP to train on.
-    :param agent: RNN agent to train.
+    :param agent: REINFORCE agent to train.
     :param total_eps: Number of episodes to train for.
     """
 
     steps = 0
     num_eps = 0
     args = agent.args
-    epsilon_final = args.epsilon
-    anneal_steps = args.anneal_steps
-    epsilon_start = args.epsilon_start
-    anneal_value = (epsilon_start - epsilon_final) / anneal_steps if anneal_steps > 0 else 0
-
-    if epsilon_start != epsilon_final:
-        agent.set_epsilon(epsilon_start)
-
 
     jit_onehot = jax.jit(one_hot, static_argnames=["n"])
     
@@ -247,43 +208,27 @@ def train_rnn_agent(amdp: AbstractMDP,
         o_0_processed = jit_onehot(o_0, amdp.n_obs)
         all_obs.append(o_0_processed)
         
-        # need to wrap in batch dimension
-        a_0 = agent.act(np.array([[o_0_processed]]))[-1][-1]
-        all_actions.append(a_0)
-        
         # TODO no truncation length
         # For PR: is this functionality that we want to make optional?
         #for _ in range(agent.trunc_len):
         while not done:
-            o_1, r_0, done, _, _ = amdp.step(a_0, gamma_terminal=args.gamma_terminal)
+            # need to wrap in batch dimension
+            a_0 = agent.act(np.array([[o_0_processed]]))[-1][-1]
+            all_actions.append(a_0)
+            o_0, r_0, done, _, _ = amdp.step(a_0, gamma_terminal=args.gamma_terminal)
             terminals.append(done)
             rewards.append(r_0)
             steps = steps + 1  
             
-            o_1_processed = jit_onehot(o_1, amdp.n_obs)
-            all_obs.append(o_1_processed)
-
-            # need to wrap in batch dimension
-            a_1 = agent.act(np.array([[o_1_processed]]))[-1][-1]
-            all_actions.append(a_1)
-            
-            # if done:
-            #     #print(f"Broke early after {t} steps")
-            #     break
-            
-            
-            
-            o_0_processed = o_1_processed
-            a_0 = a_1
+            o_0_processed = jit_onehot(o_0, amdp.n_obs)
+            all_obs.append(o_0_processed)
             
        
         batch = JaxBatch(all_obs = [all_obs],
                          obs=[all_obs[:-1]], 
-                             actions=[all_actions[:-1]], 
-                             next_obs=[all_obs[1:]], 
+                             actions=[all_actions], 
                              terminals=[terminals], 
-                             rewards=[rewards], 
-                             next_actions=[all_actions[1:]])
+                             rewards=[rewards])
 
        
         loss = agent.update(batch)
@@ -309,20 +254,16 @@ def train_rnn_agent(amdp: AbstractMDP,
             if args.save_path:
                 with open(str(args.save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
                     dill.dump(agent, dill_file)
-            print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
+            print(f"Step {steps} | Episode {num_eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Policy {agent.policy(agent.network_params, agent.get_initial_hidden_state(), batch.obs)[0]}")
         
         num_eps = num_eps + 1
        
-        # Anneal Epsilon
-        if anneal_steps > 0 and anneal_steps > num_eps:
-            agent.set_epsilon(epsilon_start - anneal_value * num_eps)
-
     agent.reset()
-    final_policy, final_q, _ = agent.policy(agent.get_initial_hidden_state(), batch.obs)
+    final_policy = agent.policy(agent.network_params, agent.get_initial_hidden_state(), batch.obs)[0]
     info = {"final_pct_success": pct_success, 
             "avg_len": avg_lengths, 
             "avg_reward": avg_rewards, 
             "loss": losses, 
-            "final_pi": final_policy,
-            "final_q": final_q}
+            "final_pi": final_policy}
     return info, agent
+
