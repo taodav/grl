@@ -14,6 +14,22 @@ from grl.memory import memory_cross_product
 from grl.utils.file_system import numpyify_and_save
 from grl.utils.policy_eval import lstdq_lambda
 
+import haiku as hk
+import jax
+import jax.numpy as jnp
+# https://dm-haiku.readthedocs.io/en/latest/#haiku-documentation
+# https://dm-haiku.readthedocs.io/en/latest/notebooks/basics.html
+
+def make_value_network(obs_dim, mem_dim, a_dim):
+    # need these because we need the output shape I guess.
+
+def forward(x):
+    # x is the memory function. Lets say its of shape (O,A,M) -> M.
+    # Let's assume its already softmaxed. Let's also assume there's no
+    # batch dimension.
+    x_flat = x.flatten()
+    mlp = hk.nets.MLP([300, 100, 10])
+
 cast_as_int = lambda x: int(float(x))
 
 def log_info(agent: ActorCritic, amdp: AbstractMDP) -> dict:
