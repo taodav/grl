@@ -9,8 +9,7 @@ import numpy as np
 config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, AbstractMDP, environment
-from grl.baselines import DQNArgs, ManagedLSTM
-from grl.baselines.reinforce import LSTMReinforceAgent, train_reinforce_agent
+from grl.baselines import DQNArgs, ManagedLSTM, LSTMReinforceAgent, train_reinforce_agent, create_managed_lstm_func
 
 
 def test_reinforce_chain_pomdp():
@@ -25,9 +24,7 @@ def test_reinforce_chain_pomdp():
 
     #ground_truth_vals = spec['gamma']**jnp.arange(chain_length - 2, -1, -1)
 
-    def _lstm_func(x: jnp.ndarray, h: hk.LSTMState):
-        module = ManagedLSTM(n_hidden, pomdp.n_actions)
-        return module(x, h)
+    _lstm_func = create_managed_lstm_func(n_hidden, pomdp.n_actions)
     
     transformed = hk.without_apply_rng(hk.transform(_lstm_func))
 
@@ -72,9 +69,7 @@ def test_reinforce_5len_tmaze():
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
     pomdp = AbstractMDP(mdp, spec['phi'])
 
-    def _lstm_func(x: jnp.ndarray, h: hk.LSTMState):
-        module = ManagedLSTM(n_hidden, pomdp.n_actions)
-        return module(x, h)
+    _lstm_func = create_managed_lstm_func(n_hidden, pomdp.n_actions)
     
     transformed = hk.without_apply_rng(hk.transform(_lstm_func))
 

@@ -11,9 +11,8 @@ from time import time
 from grl.environment import load_spec
 from grl.utils.file_system import results_path, numpyify_and_save
 from grl.run import add_tmaze_hyperparams
-from grl.baselines import DQNArgs, SimpleNN, ManagedLSTM
-from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
-from grl.baselines.rnn_agent import LSTMAgent, train_rnn_agent
+from grl.baselines import create_simple_nn_func, create_managed_lstm_func, DQNAgent, LSTMAgent, LSTMReinforceAgent, DQNArgs
+from grl.baselines import train_dqn_agent, train_rnn_agent, train_reinforce_agent
 from grl import MDP, AbstractMDP
 
 if __name__ == '__main__':
@@ -107,10 +106,8 @@ if __name__ == '__main__':
     logs, agent = None, None
     if args.algo == 'dqn_sarsa':
         # DQN uses the MDP
-        def _nn_func(x):
-            module = SimpleNN(mdp.n_states, mdp.n_actions)
-            return module(x)
-        transformed = hk.without_apply_rng(hk.transform(_nn_func))
+        nn_func = create_simple_nn_func(mdp.n_actions)
+        transformed = hk.without_apply_rng(hk.transform(nn_func))
 
 
         agent_args = DQNArgs((mdp.n_obs,),
@@ -127,11 +124,9 @@ if __name__ == '__main__':
         logs, agent = train_dqn_agent(mdp, agent, args.num_updates)
     elif args.algo == 'lstm_sarsa':
         # RNN uses the pomdp
-        def _lstm_func(x, h):
-            module = ManagedLSTM(args.hidden_size, pomdp.n_actions)
-            return module(x, h)
+        lstm_func = create_managed_lstm_func(args.hidden_size, pomdp.n_actions)
 
-        transformed = hk.without_apply_rng(hk.transform(_lstm_func))
+        transformed = hk.without_apply_rng(hk.transform(lstm_func))
 
         rand_key = random.PRNGKey(2023)
         rand_key, subkey = random.split(rand_key)
@@ -150,6 +145,26 @@ if __name__ == '__main__':
         agent = LSTMAgent(transformed, args.hidden_size, agent_args)
 
         logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
+    elif args.algo == 'lstm_reinforce':
+         # RNN uses the pomdp
+        lstm_func = create_managed_lstm_func(args.hidden_size, pomdp.n_actions)
+
+        transformed = hk.without_apply_rng(hk.transform(lstm_func))
+
+        rand_key = random.PRNGKey(2023)
+        rand_key, subkey = random.split(rand_key)
+        agent_args = DQNArgs((pomdp.n_obs,),
+                            pomdp.n_actions,
+                            pomdp.gamma,
+                            subkey,
+                            algo = "reinforce",
+                            trunc_len=args.trunc_len,
+                            alpha=args.alpha,
+                            gamma_terminal = args.gamma_terminal,
+                            save_path = agents_path,)
+        agent = LSTMReinforceAgent(transformed, args.hidden_size, agent_args)
+
+        logs, agent_args = train_reinforce_agent(pomdp, agent, args.num_updates)
 
     else:
         raise NotImplementedError(f"Error: baseline algorithm {args.algo} not recognized")
