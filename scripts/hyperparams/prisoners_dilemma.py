@@ -6,7 +6,7 @@ game_name = 'prisoners_dilemma'
 
 # leader_policies = ['tit_for_tat', 'extort', 'grudger2', 'majority3',
 #                    'treasure_hunt', 'all_d', 'all_c', 'sugar', 'alternator']
-leader_policies = ['majority3']
+leader_policies = ['treasure_hunt']
 
 hparams = {
     'file_name':
