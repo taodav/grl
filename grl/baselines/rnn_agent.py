@@ -36,9 +36,34 @@ def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarr
     q_vals = q[jnp.arange(a.shape[0]), a]
     return q_vals - target
 
+def seq_sarsa_mc_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarray, next_a: jnp.ndarray):
+    # here, q is MC q, but same same
+    shunted_discount = jnp.concatenate([jnp.ones_like(g[0:1]), g[:-1]])
+    discount = jnp.cumprod(shunted_discount)
+
+    discounted_r = r * discount
+    cumulative_discounted_r = jnp.cumsum(discounted_r[::-1])[::-1]
+
+    # If discount is 0, then cumulative_discounted_r is 0 as well, so we're safe from blowups
+    corrected_cumulative_r = cumulative_discounted_r / jnp.maximum(discount, 1e-5)
+    target = jax.lax.stop_gradient(corrected_cumulative_r)
+
+    q_vals = q[jnp.arange(a.shape[0]), a]
+    return q_vals - target
+
+def seq_sarsa_lambda_error(qtd: jnp.ndarray, qmc: jnp.ndarray, a: jnp.ndarray):
+    q_vals_td = qtd[jnp.arange(a.shape[0]), a]
+    q_vals_mc = qmc[jnp.arange(a.shape[0]), a]
+
+    return q_vals_td - q_vals_mc
+
 class LSTMAgent(DQNAgent):
     def __init__(self, network: hk.Transformed, n_hidden: int, 
-                 args: DQNArgs):
+                 args: DQNArgs, mode: str = 'td0'):
+        # td0 mode means just training on TD0 loss. Both means train on both TD0 and TD1.
+        # lambda means train on both, and then add lambda-discrepancy as aux term.
+        assert mode in ('td0', 'both', 'lambda'), mode
+        self.mode = mode
         self.args = args
         # Constructor similar to DQNAgent except that network needs to be an RNN
         # TODO this is hardcoded 1 in David's impl - should this be an arg?
@@ -68,10 +93,12 @@ class LSTMAgent(DQNAgent):
 
         self.error_fn = None
         if args.algo == 'sarsa':
-            self.error_fn = seq_sarsa_error
+            self.td_error_fn = seq_sarsa_error
+            self.batch_td_error_fn = vmap(self.td_error_fn)
+            self.batch_mc_error_fn = vmap(seq_sarsa_mc_error)
+            self.batch_lambda_error_fn = vmap(seq_sarsa_lambda_error)
         else:
             raise NotImplementedError(f"Unrecognized learning algorithm {args.algo}")
-        self.batch_error_fn = vmap(self.error_fn)
 
     def get_initial_hidden_state(self):
         """Get the initial state functionally so we can use it in update
@@ -151,11 +178,26 @@ class LSTMAgent(DQNAgent):
     
     def Qs(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
         """
-        Get all Q-values given a obs.
+        Get all Q-values given a obs, from TD(0)
         :param obs: (b x time_steps x *obs.shape) obs to find action-values
         :param model: Optional. Potenially use another model
         :return: (b x time_steps x actions) torch.tensor full of action-values.
         """
+        output = self.network.apply(network_params, obs, h)
+        return output['td0'], output['cell_state']
+
+    def Qs_MC(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
+        """
+        Get all Q-values given a obs, from TD(0)
+        :param obs: (b x time_steps x *obs.shape) obs to find action-values
+        :param model: Optional. Potenially use another model
+        :return: (b x time_steps x actions) torch.tensor full of action-values.
+        """
+        output = self.network.apply(network_params, obs, h)
+        return output['td1'], output['cell_state']
+
+    def MC_and_TD_Qs(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params):
+        # Dict with keys [td0, td1, cell_state]
         return self.network.apply(network_params, obs, h)
 
     def Q(self, obs: jnp.ndarray, action: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
@@ -171,24 +213,43 @@ class LSTMAgent(DQNAgent):
     
     def _loss(self, network_params: hk.Params,
              initial_hidden: hk.LSTMState,
-             batch: JaxBatch):
+             batch: JaxBatch,
+             mode: str = 'td0'):
         #(B x T x A)
-        q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
-        q_s0 = q_all[:, :-1, :]
-        q_s1 = q_all[:, 1:, :]
-    
+        mc_td_qs = self.MC_and_TD_Qs(batch.all_obs, initial_hidden, network_params)
+        td_q_all, mc_q_all = mc_td_qs['td0'], mc_td_qs['td1']
+        # q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
+        td_q_s0 = td_q_all[:, :-1, :]
+        td_q_s1 = td_q_all[:, 1:, :]
 
-        td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)
-        return mse(td_err)
+        mc_q_s0 = mc_q_all[:, :-1, :]
 
-    @partial(jit, static_argnums=0)
+        # td0_err
+
+        td0_err = self.batch_td_error_fn(td_q_s0, batch.actions, batch.rewards,
+                                      jnp.where(batch.terminals, 0., self.gamma),
+                                      td_q_s1, batch.next_actions)
+        td1_err = self.batch_mc_error_fn(mc_q_s0, batch.actions, batch.rewards,
+                                      jnp.where(batch.terminals, 0., self.gamma),
+                                      batch.next_actions)
+
+        lambda_err = self.batch_lambda_error_fn(td_q_s0, mc_q_s0, batch.actions)
+        if mode == 'td0':
+            return mse(td0_err)
+        elif mode == 'both':
+            return mse(td0_err) + mse(td1_err)
+        else:
+            return mse(td0_err) + mse(td1_err) + mse(lambda_err)
+
+    @partial(jit, static_argnums=(0, 1))
     def functional_update(self,
+                          mode: str, # td, both, lambda
                           network_params: hk.Params,
                           optimizer_state: hk.State,
                           hidden_state: hk.LSTMState,
                           batch: JaxBatch
                           ) -> Tuple[float, hk.Params, hk.State]:
-        loss, grad = jax.value_and_grad(self._loss)(network_params, hidden_state, batch)
+        loss, grad = jax.value_and_grad(self._loss)(network_params, hidden_state, batch, mode)
         updates, optimizer_state = self.optimizer.update(grad, optimizer_state, network_params)
         network_params = optax.apply_updates(network_params, updates)
 
@@ -203,7 +264,7 @@ class LSTMAgent(DQNAgent):
         :return: loss
         """
         loss, self.network_params, self.optimizer_state = \
-            self.functional_update(self.network_params, self.optimizer_state, self.get_initial_hidden_state(), batch)
+            self.functional_update(self.mode, self.network_params, self.optimizer_state, self.get_initial_hidden_state(), batch)
         return loss
     
 def train_rnn_agent(mdp: MDP,
@@ -234,7 +295,9 @@ def train_rnn_agent(mdp: MDP,
         jit_onehot = jax.jit(lambda x, y: jnp.zeros((mdp.n_obs,)))
     
     avg_rewards = []
+    total_rewards = []
     avg_rewards_ep = []
+    total_rewards_ep = []
     avg_lengths = []
     episode_lengths = []
     losses = []
@@ -292,7 +355,8 @@ def train_rnn_agent(mdp: MDP,
         loss = agent.update(batch)
         episode_lengths.append(len(rewards))
         avg_rewards_ep.append(np.average(rewards))
-           
+        total_rewards_ep.append(np.sum(rewards))
+
         if num_eps % 1000 == 0:
             # various monitoring metrics
             # TODO should I trim these down?
@@ -303,7 +367,9 @@ def train_rnn_agent(mdp: MDP,
             pct_neutral = 1 - pct_success - pct_fail
             avg_rewards.append(np.average(avg_rewards_ep))
             avg_rewards_ep = []
-        
+            total_rewards.append(np.average(total_rewards_ep))
+            total_rewards_ep = []
+
             avg_len = np.average(np.array(episode_lengths))
             avg_lengths.append(avg_len)
             episode_lengths = []
@@ -312,7 +378,8 @@ def train_rnn_agent(mdp: MDP,
             if args.save_path:
                 with open(str(args.save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
                     dill.dump(agent, dill_file)
-            print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
+            # print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
+            print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | \n Q-vals (TD) {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]} \n Q-vals (MC) {agent.Qs_MC(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
         
         num_eps = num_eps + 1
        
@@ -324,7 +391,8 @@ def train_rnn_agent(mdp: MDP,
     final_policy, final_q, _ = agent.policy(agent.get_initial_hidden_state(), batch.obs)
     info = {"final_pct_success": pct_success, 
             "avg_len": avg_lengths, 
-            "avg_reward": avg_rewards, 
+            "avg_reward": avg_rewards,
+            "total_reward": total_rewards,
             "loss": losses, 
             "final_pi": final_policy,
             "final_q": final_q}

@@ -43,6 +43,7 @@ class SimpleNN(hk.Module):
 class ManagedLSTM(hk.Module):
     """
     LSTM that expects its hidden state to be managed by the calling class.
+    Doesn't ask whether you want the TD(1) head, you can just ignore if you don't.
     """
     def __init__(self, hidden_size, output_size, name='managed_lstm'):
         super().__init__(name=name)
@@ -52,10 +53,22 @@ class ManagedLSTM(hk.Module):
 
         self._linear = hk.Linear(output_size, w_init=init, b_init=b_init)
 
+        init2 = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
+        b_init2 = hk.initializers.Constant(0)
+
+        self._second_linear = hk.Linear(output_size, w_init=init2, b_init=b_init2)
+
     def __call__(self, x, h):
         # initial_state = jnp.zeros(initial_state.shape)
+        # Returns a dictionary of TD0, TD1 and LSTM state
         outputs, cell_state = hk.dynamic_unroll(self._lstm, x, h, time_major=False)
-        return hk.BatchApply(self._linear)(outputs), cell_state
+
+        return {
+            'td0': hk.BatchApply(self._linear)(outputs),
+            'td1': hk.BatchApply(self._second_linear)(outputs),
+            'cell_state': cell_state
+        }
+
 
 # TODO currently unused
 class SimpleGRU(hk.Module):
