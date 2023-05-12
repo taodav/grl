@@ -81,7 +81,8 @@ def test_reinforce_5len_tmaze():
                          subkey, 
                          algo = "reinforce", 
                          trunc_len=trunc_len, 
-                         alpha=0.001)
+                         alpha=0.001,
+                         gamma_terminal = True)
     agent = LSTMReinforceAgent(transformed, n_hidden, agent_args)
 
     train_logs, agent_args = train_reinforce_agent(pomdp, agent, n_eps)

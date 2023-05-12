@@ -179,7 +179,9 @@ class LSTMReinforceAgent():
         #(B x T x A)
         obs_policy_logits, _ = self.policy_logits(network_params, initial_hidden, batch.obs)
     
-        returns_scaled = self.batch_error_fn(batch.actions, batch.rewards, obs_policy_logits, jnp.full((batch.obs.shape[0],), self.gamma))
+        effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
+
+        returns_scaled = self.batch_error_fn(batch.actions, batch.rewards, obs_policy_logits, jnp.full((batch.obs.shape[0],), effective_gamma))
         return -jnp.sum(returns_scaled)
 
     @partial(jit, static_argnums=0)

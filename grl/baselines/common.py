@@ -23,7 +23,7 @@ class DQNArgs:
     trunc_len: int = None
     init_hidden_var: float = 0.
     save_path: Path = None
-    gamma_terminal: bool = False
+    gamma_terminal: bool = True
 
 def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
     if targets is None:

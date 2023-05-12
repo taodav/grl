@@ -208,9 +208,10 @@ class LSTMAgent(DQNAgent):
         q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
         q_s0 = q_all[:, :-1, :]
         q_s1 = q_all[:, 1:, :]
-    
 
-        td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., self.gamma), q_s1, batch.next_actions)
+        effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
+
+        td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., effective_gamma), q_s1, batch.next_actions)
         return mse(td_err)
 
     @partial(jit, static_argnums=0)

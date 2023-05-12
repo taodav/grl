@@ -88,7 +88,8 @@ def test_lstm_5len_tmaze():
                          epsilon=0.1,
                          epsilon_start=1.,
                          anneal_steps=n_eps / 2,
-                         save_path = pathlib.Path('results/baselines/test_tmaze/'))
+                         save_path = pathlib.Path('results/baselines/test_tmaze/'),
+                         gamma_terminal = True,)
     agent = LSTMAgent(transformed, n_hidden, agent_args)
 
     train_logs, agent_args = train_rnn_agent(pomdp, agent, n_eps)
