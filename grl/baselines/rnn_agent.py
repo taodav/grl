@@ -38,6 +38,7 @@ def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarr
 
 def seq_sarsa_mc_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarray, next_a: jnp.ndarray):
     # here, q is MC q, but same same
+    # This could be simpler if we assume gamma_terminal is on, but let's not
     shunted_discount = jnp.concatenate([jnp.ones_like(g[0:1]), g[:-1]])
     discount = jnp.cumprod(shunted_discount)
 
@@ -45,6 +46,7 @@ def seq_sarsa_mc_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.nd
     cumulative_discounted_r = jnp.cumsum(discounted_r[::-1])[::-1]
 
     # If discount is 0, then cumulative_discounted_r is 0 as well, so we're safe from blowups
+    # After shunting, it should never be that anyways though to be fair
     corrected_cumulative_r = cumulative_discounted_r / jnp.maximum(discount, 1e-5)
     target = jax.lax.stop_gradient(corrected_cumulative_r)
 
@@ -226,12 +228,13 @@ class LSTMAgent(DQNAgent):
         mc_q_s0 = mc_q_all[:, :-1, :]
 
         # td0_err
+        effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
 
         td0_err = self.batch_td_error_fn(td_q_s0, batch.actions, batch.rewards,
-                                      jnp.where(batch.terminals, 0., self.gamma),
+                                      jnp.where(batch.terminals, 0., effective_gamma),
                                       td_q_s1, batch.next_actions)
         td1_err = self.batch_mc_error_fn(mc_q_s0, batch.actions, batch.rewards,
-                                      jnp.where(batch.terminals, 0., self.gamma),
+                                      jnp.where(batch.terminals, 0., effective_gamma),
                                       batch.next_actions)
 
         lambda_err = self.batch_lambda_error_fn(td_q_s0, mc_q_s0, batch.actions)
