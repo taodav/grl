@@ -59,11 +59,12 @@ def seq_sarsa_lambda_error(qtd: jnp.ndarray, qmc: jnp.ndarray, a: jnp.ndarray):
 
 class LSTMAgent(DQNAgent):
     def __init__(self, network: hk.Transformed, n_hidden: int, 
-                 args: DQNArgs, mode: str = 'td0'):
+                 args: DQNArgs, mode: str = 'td0', lambda_coefficient: float = 1.0):
         # td0 mode means just training on TD0 loss. Both means train on both TD0 and TD1.
         # lambda means train on both, and then add lambda-discrepancy as aux term.
         assert mode in ('td0', 'both', 'lambda'), mode
         self.mode = mode
+        self.lambda_coefficient = lambda_coefficient
         self.args = args
         # Constructor similar to DQNAgent except that network needs to be an RNN
         # TODO this is hardcoded 1 in David's impl - should this be an arg?
@@ -239,7 +240,7 @@ class LSTMAgent(DQNAgent):
         elif mode == 'both':
             return mse(td0_err) + mse(td1_err)
         else:
-            return mse(td0_err) + mse(td1_err) + mse(lambda_err)
+            return mse(td0_err) + mse(td1_err) + (self.lambda_coefficient * mse(lambda_err))
 
     @partial(jit, static_argnums=(0, 1))
     def functional_update(self,

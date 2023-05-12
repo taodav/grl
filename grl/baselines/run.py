@@ -55,6 +55,8 @@ if __name__ == '__main__':
         help='seed for random number generators')
     parser.add_argument('--lstm_mode', default='td0', type=str,
         help='Either td0, both, or lambda. Defines lstm loss')
+    parser.add_argument('--lambda_coefficient', default=1.0, type=float,
+        help='How much weight to give the lambda discrepancy')
     parser = add_tmaze_hyperparams(parser)
     global args
     args = parser.parse_args()
@@ -149,7 +151,9 @@ if __name__ == '__main__':
                             anneal_steps=args.epsilon_anneal_steps,
                             gamma_terminal = args.gamma_terminal,
                             save_path = agents_path,)
-        agent = LSTMAgent(transformed, args.hidden_size, agent_args, mode=args.lstm_mode)
+        agent = LSTMAgent(transformed, args.hidden_size,
+                          agent_args, mode=args.lstm_mode,
+                          lambda_coefficient=args.lambda_coefficient,)
 
         logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
 
