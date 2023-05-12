@@ -11,8 +11,10 @@ from time import time
 from grl.environment import load_spec
 from grl.utils.file_system import results_path, numpyify_and_save
 from grl.run import add_tmaze_hyperparams
-from grl.baselines import create_simple_nn_func, create_managed_lstm_func, DQNAgent, LSTMAgent, LSTMReinforceAgent, DQNArgs
-from grl.baselines import train_dqn_agent, train_rnn_agent, train_reinforce_agent
+from grl.baselines import create_simple_nn_func, create_managed_lstm_func, DQNArgs
+from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
+from grl.baselines.rnn_agent import LSTMAgent, train_rnn_agent
+from grl.baselines.reinforce import LSTMReinforceAgent, train_reinforce_agent
 from grl import MDP, AbstractMDP
 
 if __name__ == '__main__':

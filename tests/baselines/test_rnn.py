@@ -5,11 +5,12 @@ from jax.config import config
 import haiku as hk
 from grl.mdp import one_hot
 import numpy as np
+import pathlib
 
 config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, AbstractMDP, environment
-from grl.baselines import DQNArgs, ManagedLSTM, LSTMAgent, train_rnn_agent, create_managed_lstm_func
+from grl.baselines import DQNArgs, LSTMAgent, train_rnn_agent, create_managed_lstm_func
 
 
 def test_lstm_chain_pomdp():
@@ -86,7 +87,8 @@ def test_lstm_5len_tmaze():
                          alpha=0.001, 
                          epsilon=0.1,
                          epsilon_start=1.,
-                         anneal_steps=n_eps / 2)
+                         anneal_steps=n_eps / 2,
+                         save_path = pathlib.Path('results/baselines/test_tmaze/'))
     agent = LSTMAgent(transformed, n_hidden, agent_args)
 
     train_logs, agent_args = train_rnn_agent(pomdp, agent, n_eps)
@@ -131,7 +133,7 @@ def test_lstm_cheese():
 
     
 if __name__ == "__main__":
-    test_lstm_chain_pomdp()
+    #test_lstm_chain_pomdp()
     test_lstm_5len_tmaze()
-    test_lstm_cheese()
+    #test_lstm_cheese()
 

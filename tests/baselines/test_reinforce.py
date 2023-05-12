@@ -9,7 +9,7 @@ import numpy as np
 config.update('jax_platform_name', 'cpu')
 
 from grl import MDP, AbstractMDP, environment
-from grl.baselines import DQNArgs, ManagedLSTM, LSTMReinforceAgent, train_reinforce_agent, create_managed_lstm_func
+from grl.baselines import DQNArgs, LSTMReinforceAgent, train_reinforce_agent, create_managed_lstm_func
 
 
 def test_reinforce_chain_pomdp():

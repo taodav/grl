@@ -10,7 +10,6 @@ import jax.numpy as jnp
 import numpy as np
 import haiku as hk
 import optax
-import dill
 from functools import partial
 from jax import random, jit, vmap
 from optax import sgd, adam
@@ -18,8 +17,11 @@ from typing import Tuple
 from grl import AbstractMDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
-from .dqn_agent import DQNAgent
-from . import DQNArgs, mse
+from grl.baselines.common import DQNArgs, mse, create_managed_lstm_func
+from grl.baselines.dqn_agent import DQNAgent
+from grl.utils.file_system import numpyify_and_save, load_info
+import pickle
+from dataclasses import asdict
 
 # error func from David's impl
 def seq_sarsa_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray, g: jnp.ndarray, q1: jnp.ndarray, next_a: jnp.ndarray):
@@ -72,6 +74,36 @@ class LSTMAgent(DQNAgent):
         else:
             raise NotImplementedError(f"Unrecognized learning algorithm {args.algo}")
         self.batch_error_fn = vmap(self.error_fn)
+
+    def save(self, save_path):
+        info = {
+            'agent_type': 'LSTMAgent',
+            'args': asdict(self.args),
+            'n_hidden': self.n_hidden
+        }
+        save_path.mkdir(exist_ok=True, parents=True)
+        info_path = save_path / 'info'
+        params_path = save_path / 'params.pkl'
+        numpyify_and_save(info_path, info)
+        with open(params_path, 'wb') as fp:
+            pickle.dump(self.network_params, fp)
+
+
+    @classmethod
+    def load(cls, save_path):
+        info_path = save_path / 'info.npy'
+        params_path = save_path / 'params.pkl'
+
+        info = load_info(info_path)
+
+        with open(params_path, 'rb') as fp:
+            params = pickle.load(fp)
+        params = jax.device_put(params)
+        transformed = hk.without_apply_rng(hk.transform(create_managed_lstm_func(info['n_hidden'], info['args']['n_actions'])))
+        agent = cls(transformed, info['n_hidden'], DQNArgs(**info['args']))
+        agent.network_params = params
+        return agent
+
 
     def get_initial_hidden_state(self):
         """Get the initial state functionally so we can use it in update
@@ -307,8 +339,7 @@ def train_rnn_agent(amdp: AbstractMDP,
 
             losses.append(loss)
             if args.save_path:
-                with open(str(args.save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
-                    dill.dump(agent, dill_file)
+                agent.save(args.save_path / f'ep_{num_eps}')
             print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
         
         num_eps = num_eps + 1

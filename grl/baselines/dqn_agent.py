@@ -14,7 +14,10 @@ from typing import Tuple
 from grl import MDP
 from grl.utils.batching import JaxBatch
 from grl.mdp import one_hot
-from . import DQNArgs, mse
+from grl.baselines import DQNArgs, mse, create_simple_nn_func
+from grl.utils.file_system import numpyify_and_save, load_info
+import pickle
+from dataclasses import asdict
 
 # Error functions from David's impl
 def sarsa_error(q: jnp.ndarray, a: int, r: jnp.ndarray, g: float, q1: jnp.ndarray, next_a: int):
@@ -67,6 +70,35 @@ class DQNAgent:
         elif args.algo == 'qlearning':
             self.error_fn = qlearning_error
         self.batch_error_fn = vmap(self.error_fn)
+
+    def save(self, save_path):
+        info = {
+            'agent_type': 'DQNAgent',
+            'args': asdict(self.args),
+        }
+
+        save_path.mkdir(exist_ok=True, parents=True)
+        info_path = save_path / 'info'
+        params_path = save_path / 'params.pkl'
+        numpyify_and_save(info_path, info)
+        with open(params_path, 'wb') as fp:
+            pickle.dump(self.network_params, fp)
+
+
+    @classmethod
+    def load(cls, save_path):
+        info_path = save_path / 'info.npy'
+        params_path = save_path / 'params.pkl'
+
+        info = load_info(info_path)
+
+        with open(params_path, 'rb') as fp:
+            params = pickle.load(fp)
+        params = jax.device_put(params)
+        transformed = hk.without_apply_rng(hk.transform(create_simple_nn_func(info['args']['n_actions'])))
+        agent = cls(transformed, DQNArgs(**info['args']))
+        agent.network_params = params
+        return agent
 
     def set_epsilon(self, eps):
         self.eps = eps
@@ -177,6 +209,7 @@ def train_dqn_agent(mdp: MDP,
     :param agent: DQNAgent to train.
     :param total_steps: Number of steps to train for.
     """
+    args = agent.args
     jit_onehot = jax.jit(one_hot, static_argnames=["n"])
     steps = 0
     num_eps = 0
@@ -242,6 +275,9 @@ def train_dqn_agent(mdp: MDP,
                 episode_lengths = []
 
                 losses.append(loss)
+
+                if args.save_path:
+                    agent.save(args.save_path / f'ep_{num_eps}')
 
                 print(f"Step {steps} | Episode {num_eps} | Loss {loss}")
                        

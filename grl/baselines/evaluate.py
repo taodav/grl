@@ -1,18 +1,19 @@
 from argparse import ArgumentParser
-import dill
 from grl import MDP, AbstractMDP, environment
 from grl.mdp import one_hot
 import jax
 import numpy as np
 from pathlib import Path
 from definitions import ROOT_DIR
-from grl.baselines import ManagedLSTM, DQNArgs
+from grl.baselines.dqn_agent import DQNAgent
+from grl.baselines.rnn_agent import LSTMAgent
+from grl.baselines.reinforce import LSTMReinforceAgent
 
-
-
-class Namespace:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+AGENT_TYPES = {
+    'dqn': DQNAgent,
+    'lstm_sarsa': LSTMAgent,
+    'lstm_reinforce': LSTMReinforceAgent
+}
 
 def evaluate_agent(agent, amdp, num_episodes, gamma_terminal):
     
@@ -51,11 +52,13 @@ def evaluate_agent(agent, amdp, num_episodes, gamma_terminal):
 
 if __name__ == "__main__":
     p = ArgumentParser()
-    p.add_argument("--agent", required=True, 
-                   help="(relative from results directory) path to agent to evaluate")
+    p.add_argument("--agent_dir", required=True, 
+                   help="(relative from results directory or absolute) path to agent to evaluate")
+    p.add_argument('--agent_type', required=True,
+                   help='Type of agent to load: one of [dqn, lstm_sarsa, lstm_reinforce]')
     p.add_argument("--spec", required=True,
                    help="Environment to evaluate on, e.g. 'cheese.95'")
-    p.add_argument("--num_episodes", default=1000,
+    p.add_argument("--num_episodes", default=1000, type=int,
                    help="Number of episodes to perform evaluation on. Script reports average discounted return across episodes.")
     p.add_argument("--gamma_terminal", action='store_true',
                    help="Terminate episodes with probability (1-gamma) at each step?")
@@ -63,15 +66,14 @@ if __name__ == "__main__":
     args = p.parse_args()
     
     results_dir = Path(ROOT_DIR, 'results')
+    agent_path = results_dir / args.agent_dir
     # load the environment
-    spec = environment.load_spec("cheese.95")
+    spec = environment.load_spec(args.spec)
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
     pomdp = AbstractMDP(mdp, spec['phi'])
     # try to load the agent
-    with open(results_dir / args.agent, 'rb') as dill_file:
-        agent = dill.load(dill_file)
+    agent = AGENT_TYPES[args.agent_type].load(agent_path)
 
-    args.__dict__.update({'hidden_size': agent.n_hidden})
     
     agent.epsilon = 0.
     # TODO just printing rn?
