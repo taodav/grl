@@ -4,7 +4,7 @@ hparams = {
     'entry':
         '-m grl.baselines.run',
     'args': [{
-        'algo': 'lstm_sarsa',
+        'algo': 'lstm_reinforce',
         'spec': [
             'tiger-alt-start',
             'network',
@@ -15,13 +15,11 @@ hparams = {
             'paint.95',
             'bridge-repair',
             'hallway',
+            'cheese.95',
         ],
-        'gamma_terminal': False,
+        'gamma_terminal': True,
         'num_updates': int(1.5e5),
-        'start_epsilon': 1.,
         'hidden_size': 12,
-        'epsilon': 0.1,
-        'epsilon_anneal_steps': int(1.5e5 / 4),
         'alpha': 0.001,
         'trunc_len': 100, # currently unused
         'seed': [2020 + i for i in range(10)],
