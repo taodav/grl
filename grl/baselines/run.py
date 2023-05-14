@@ -16,6 +16,21 @@ from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
 from grl.baselines.rnn_agent import LSTMAgent, train_rnn_agent
 from grl import MDP, AbstractMDP
 
+# Specifies min and max rewards, we just normalize by difference.
+reward_range_dict = {
+    'cheese.95': (10.0, 0),
+    'tiger-alt-start': (10.0, -100.0),
+    'network': (80.0, -40.0),
+    'tmaze_5_two_thirds_up': (4.0, -0.1),
+    'example_7': (1.0, 0.0),
+    '4x3.95': (1.0, -1.0),
+    'shuttle.95': (10.0, -3.0),
+    'paint.95': (1.0, -1.0),
+    'bridge-repair': (4018,  0),
+    'hallway': (1.0,  0),
+}
+
+
 if __name__ == '__main__':
     start_time = time()
 
@@ -57,6 +72,9 @@ if __name__ == '__main__':
         help='Either td0, both, or lambda. Defines lstm loss')
     parser.add_argument('--lambda_coefficient', default=1.0, type=float,
         help='How much weight to give the lambda discrepancy')
+    parser.add_argument('--reward_scale', default=1.0, type=float,
+        help='How much to scale rewards during training')
+    parser.add_argument('--normalize_reward_range', action='store_true', default=False)
     parser = add_tmaze_hyperparams(parser)
     global args
     args = parser.parse_args()
@@ -151,9 +169,16 @@ if __name__ == '__main__':
                             anneal_steps=args.epsilon_anneal_steps,
                             gamma_terminal = args.gamma_terminal,
                             save_path = agents_path,)
+        reward_scale = args.reward_scale
+        if args.normalize_reward_range and args.spec in reward_range_dict:
+            reward_scale = 1 / (reward_range_dict[args.spec][0] - reward_range_dict[args.spec][1])
+            print(f'normalizing {args.spec} by {reward_scale}')
         agent = LSTMAgent(transformed, args.hidden_size,
                           agent_args, mode=args.lstm_mode,
-                          lambda_coefficient=args.lambda_coefficient,)
+                          lambda_coefficient=args.lambda_coefficient,
+                          reward_scale=reward_scale,
+                          # reward_scale=args.reward_scale,
+                          )
 
         logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
 

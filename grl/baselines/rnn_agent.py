@@ -61,12 +61,14 @@ def seq_sarsa_lambda_error(qtd: jnp.ndarray, qmc: jnp.ndarray, a: jnp.ndarray):
 
 class LSTMAgent(DQNAgent):
     def __init__(self, network: hk.Transformed, n_hidden: int, 
-                 args: DQNArgs, mode: str = 'td0', lambda_coefficient: float = 1.0):
+                 args: DQNArgs, mode: str = 'td0', lambda_coefficient: float = 1.0,
+                 reward_scale : float =1.0):
         # td0 mode means just training on TD0 loss. Both means train on both TD0 and TD1.
         # lambda means train on both, and then add lambda-discrepancy as aux term.
         assert mode in ('td0', 'both', 'lambda'), mode
         self.mode = mode
         self.lambda_coefficient = lambda_coefficient
+        self.reward_scale = reward_scale
         self.args = args
         # Constructor similar to DQNAgent except that network needs to be an RNN
         # TODO this is hardcoded 1 in David's impl - should this be an arg?
@@ -229,21 +231,31 @@ class LSTMAgent(DQNAgent):
 
         # td0_err
         effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
+        effective_rewards = batch.rewards * self.reward_scale
 
-        td0_err = self.batch_td_error_fn(td_q_s0, batch.actions, batch.rewards,
+        td0_err = self.batch_td_error_fn(td_q_s0, batch.actions, effective_rewards,
                                       jnp.where(batch.terminals, 0., effective_gamma),
                                       td_q_s1, batch.next_actions)
-        td1_err = self.batch_mc_error_fn(mc_q_s0, batch.actions, batch.rewards,
+        td1_err = self.batch_mc_error_fn(mc_q_s0, batch.actions, effective_rewards,
                                       jnp.where(batch.terminals, 0., effective_gamma),
                                       batch.next_actions)
 
         lambda_err = self.batch_lambda_error_fn(td_q_s0, mc_q_s0, batch.actions)
+        td0_err, td1_err, lambda_err = mse(td0_err), mse(td1_err), mse(lambda_err)
         if mode == 'td0':
-            return mse(td0_err)
+            # main_loss =  mse(td0_err)
+            main_loss =  td0_err
         elif mode == 'both':
-            return mse(td0_err) + mse(td1_err)
+            # main_loss = mse(td0_err) + mse(td1_err)
+            main_loss = td0_err + td1_err
         else:
-            return mse(td0_err) + mse(td1_err) + (self.lambda_coefficient * mse(lambda_err))
+            main_loss =  td0_err + td1_err + (self.lambda_coefficient * lambda_err)
+
+        return main_loss, {
+            'td0_loss': td0_err,
+            'td1_loss': td1_err,
+            'lambda_loss': lambda_err,
+        }
 
     @partial(jit, static_argnums=(0, 1))
     def functional_update(self,
@@ -253,11 +265,11 @@ class LSTMAgent(DQNAgent):
                           hidden_state: hk.LSTMState,
                           batch: JaxBatch
                           ) -> Tuple[float, hk.Params, hk.State]:
-        loss, grad = jax.value_and_grad(self._loss)(network_params, hidden_state, batch, mode)
+        (loss, aux_loss), grad = jax.value_and_grad(self._loss, has_aux=True)(network_params, hidden_state, batch, mode)
         updates, optimizer_state = self.optimizer.update(grad, optimizer_state, network_params)
         network_params = optax.apply_updates(network_params, updates)
 
-        return loss, network_params, optimizer_state
+        return loss, aux_loss, network_params, optimizer_state
 
     def update(self, 
                batch: JaxBatch
@@ -267,9 +279,9 @@ class LSTMAgent(DQNAgent):
         :param batch: JaxBatch of data to process.
         :return: loss
         """
-        loss, self.network_params, self.optimizer_state = \
+        loss, aux_loss, self.network_params, self.optimizer_state = \
             self.functional_update(self.mode, self.network_params, self.optimizer_state, self.get_initial_hidden_state(), batch)
-        return loss
+        return loss, aux_loss
     
 def train_rnn_agent(mdp: MDP,
                     agent: DQNAgent,
@@ -305,6 +317,7 @@ def train_rnn_agent(mdp: MDP,
     avg_lengths = []
     episode_lengths = []
     losses = []
+    aux_losses = {}
     pct_success = 0.
     avg_len = 0.
     while (num_eps <= total_eps):
@@ -346,7 +359,7 @@ def train_rnn_agent(mdp: MDP,
             o_0_processed = o_1_processed
             a_0 = a_1
             
-       
+        # print(rewards)
         batch = JaxBatch(all_obs = [all_obs],
                          obs=[all_obs[:-1]], 
                              actions=[all_actions[:-1]], 
@@ -356,7 +369,7 @@ def train_rnn_agent(mdp: MDP,
                              next_actions=[all_actions[1:]])
 
        
-        loss = agent.update(batch)
+        loss, aux_loss = agent.update(batch)
         episode_lengths.append(len(rewards))
         avg_rewards_ep.append(np.average(rewards))
         total_rewards_ep.append(np.sum(rewards))
@@ -379,6 +392,12 @@ def train_rnn_agent(mdp: MDP,
             episode_lengths = []
 
             losses.append(loss)
+            # Adds aux losses as individual entries 
+            for aux_key, aux_val in aux_loss.items():
+                if not aux_losses.get(aux_key):
+                    aux_losses[aux_key] = []
+                aux_losses[aux_key].append(aux_val)
+
             if args.save_path:
                 with open(str(args.save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
                     dill.dump(agent, dill_file)
@@ -397,7 +416,8 @@ def train_rnn_agent(mdp: MDP,
             "avg_len": avg_lengths, 
             "avg_reward": avg_rewards,
             "total_reward": total_rewards,
-            "loss": losses, 
+            "loss": losses,
+            "aux_loss": aux_losses,
             "final_pi": final_policy,
             "final_q": final_q}
     return info, agent
