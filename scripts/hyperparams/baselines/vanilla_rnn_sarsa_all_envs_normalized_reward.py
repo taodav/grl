@@ -1,6 +1,6 @@
 hparams = {
     'file_name':
-        'vanilla_rnn_sarsa_all_envs.txt',
+        'vanilla_rnn_sarsa_all_envs_normalized_reward.txt',
     'entry':
         '-m grl.baselines.run',
     'args': [{
