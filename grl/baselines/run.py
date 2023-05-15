@@ -18,6 +18,21 @@ from grl.baselines.reinforce import LSTMReinforceAgent, train_reinforce_agent
 from grl.baselines.vanilla_rnn_agent import VanillaRNNAgent, train_vanilla_rnn_agent
 from grl import MDP, AbstractMDP
 
+# Specifies min and max rewards, we just normalize by difference.
+reward_range_dict = {
+    'cheese.95': (10.0, 0),
+    'tiger-alt-start': (10.0, -100.0),
+    'network': (80.0, -40.0),
+    'tmaze_5_two_thirds_up': (4.0, -0.1),
+    'example_7': (1.0, 0.0),
+    '4x3.95': (1.0, -1.0),
+    'shuttle.95': (10.0, -3.0),
+    'paint.95': (1.0, -1.0),
+    'bridge-repair': (4018,  0),
+    'hallway': (1.0,  0),
+}
+
+
 if __name__ == '__main__':
     start_time = time()
 
@@ -47,6 +62,9 @@ if __name__ == '__main__':
                         help='For epsilon annealing: What starting epsilon to use?')
     parser.add_argument('--epsilon_anneal_steps', default=0, type=int,
                         help='For epsilon annealing: anneal over how many steps?')
+    parser.add_argument('--reward_scale', default=1.0, type=float,
+        help='How much to scale rewards during training')
+    parser.add_argument('--normalize_reward_range', action='store_true', default=False)
     parser.add_argument('--log', action='store_true',
         help='save output to logs/')
     parser.add_argument('--study_name', default=None, type=str,
@@ -107,6 +125,10 @@ if __name__ == '__main__':
     agents_path = agents_dir / f'{results_path.stem}'
 
     logs, agent = None, None
+    reward_scale = args.reward_scale
+    if args.normalize_reward_range and args.spec in reward_range_dict:
+        reward_scale = 1 / (reward_range_dict[args.spec][0] - reward_range_dict[args.spec][1])
+        print(f'normalizing {args.spec} by {reward_scale}')
     if args.algo == 'dqn_sarsa':
         # DQN uses the MDP
         nn_func = create_simple_nn_func(mdp.n_actions)
@@ -121,7 +143,8 @@ if __name__ == '__main__':
                              epsilon = args.epsilon,
                              anneal_steps=args.epsilon_anneal_steps,
                              epsilon_start=args.start_epsilon,
-                             alpha = args.alpha)
+                             alpha = args.alpha,
+                             reward_scale=reward_scale)
         agent = DQNAgent(transformed, agent_args)
 
         logs, agent = train_dqn_agent(mdp, agent, args.num_updates)
@@ -144,7 +167,9 @@ if __name__ == '__main__':
                             epsilon_start=args.start_epsilon,
                             anneal_steps=args.epsilon_anneal_steps,
                             gamma_terminal = args.gamma_terminal,
-                            save_path = agents_path,)
+                            save_path = agents_path,
+                            reward_scale=reward_scale,
+                            )
         agent = LSTMAgent(transformed, args.hidden_size, agent_args)
 
         logs, agent_args = train_rnn_agent(pomdp, agent, args.num_updates)
@@ -164,7 +189,8 @@ if __name__ == '__main__':
                             trunc_len=args.trunc_len,
                             alpha=args.alpha,
                             gamma_terminal = args.gamma_terminal,
-                            save_path = agents_path,)
+                            save_path = agents_path,
+                            reward_scale=reward_scale,)
         agent = LSTMReinforceAgent(transformed, args.hidden_size, agent_args)
 
         logs, agent_args = train_reinforce_agent(pomdp, agent, args.num_updates)
@@ -188,7 +214,8 @@ if __name__ == '__main__':
                             epsilon_start=args.start_epsilon,
                             anneal_steps=args.epsilon_anneal_steps,
                             gamma_terminal = args.gamma_terminal,
-                            save_path = agents_path,)
+                            save_path = agents_path,
+                            reward_scale=reward_scale)
         agent = VanillaRNNAgent(transformed, args.hidden_size, agent_args)
 
         logs, agent_args = train_vanilla_rnn_agent(pomdp, agent, args.num_updates)

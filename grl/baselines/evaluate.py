@@ -8,11 +8,13 @@ from definitions import ROOT_DIR
 from grl.baselines.dqn_agent import DQNAgent
 from grl.baselines.rnn_agent import LSTMAgent
 from grl.baselines.reinforce import LSTMReinforceAgent
+from grl.baselines.vanilla_rnn_agent import VanillaRNNAgent
 
 AGENT_TYPES = {
     'dqn': DQNAgent,
     'lstm_sarsa': LSTMAgent,
-    'lstm_reinforce': LSTMReinforceAgent
+    'lstm_reinforce': LSTMReinforceAgent,
+    'vanilla_rnn_sarsa': VanillaRNNAgent
 }
 
 def evaluate_agent(agent, amdp, num_episodes, gamma_terminal):

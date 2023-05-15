@@ -54,6 +54,7 @@ class LSTMReinforceAgent():
         # internalize args
         self.features_shape = args.features_shape
         self.n_actions = args.n_actions
+        self.reward_scale = args.reward_scale
         self.gamma = args.gamma
         assert args.trunc_len is not None
         self.trunc_len = args.trunc_len # for truncated backprop through time
@@ -180,8 +181,9 @@ class LSTMReinforceAgent():
         obs_policy_logits, _ = self.policy_logits(network_params, initial_hidden, batch.obs)
     
         effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
+        effective_rewards = batch.rewards * self.reward_scale
 
-        returns_scaled = self.batch_error_fn(batch.actions, batch.rewards, obs_policy_logits, jnp.full((batch.obs.shape[0],), effective_gamma))
+        returns_scaled = self.batch_error_fn(batch.actions, effective_rewards, obs_policy_logits, jnp.full((batch.obs.shape[0],), effective_gamma))
         return -jnp.sum(returns_scaled)
 
     @partial(jit, static_argnums=0)

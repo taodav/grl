@@ -24,6 +24,7 @@ class DQNArgs:
     init_hidden_var: float = 0.
     save_path: Path = None
     gamma_terminal: bool = True
+    reward_scale: float = 1.
 
 def mse(predictions: jnp.ndarray, targets: jnp.ndarray = None):
     if targets is None:

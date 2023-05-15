@@ -45,6 +45,8 @@ class LSTMAgent(DQNAgent):
         # Constructor similar to DQNAgent except that network needs to be an RNN
         # TODO this is hardcoded 1 in David's impl - should this be an arg?
         self.batch_size = 1
+        self.reward_scale = args.reward_scale
+
         # internalize args
         self.features_shape = args.features_shape
         self.n_actions = args.n_actions
@@ -202,8 +204,9 @@ class LSTMAgent(DQNAgent):
         q_s1 = q_all[:, 1:, :]
 
         effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
+        effective_rewards = batch.rewards * self.reward_scale
 
-        td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., effective_gamma), q_s1, batch.next_actions)
+        td_err = self.batch_error_fn(q_s0, batch.actions, effective_rewards, jnp.where(batch.terminals, 0., effective_gamma), q_s1, batch.next_actions)
         return mse(td_err)
 
     @partial(jit, static_argnums=0)

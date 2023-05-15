@@ -51,6 +51,8 @@ class DQNAgent:
         self.features_shape = args.features_shape
         self.n_actions = args.n_actions
         self.gamma = args.gamma
+        self.reward_scale = args.reward_scale
+
 
         self._rand_key, network_rand_key = random.split(args.rand_key)
         self.network = network
@@ -172,8 +174,9 @@ class DQNAgent:
         q_s1 = self.Qs(batch.next_obs, network_params)
     
         effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
+        effective_rewards = batch.rewards * self.reward_scale
 
-        td_err = self.batch_error_fn(q_s0, batch.actions, batch.rewards, jnp.where(batch.terminals, 0., effective_gamma), q_s1, batch.next_actions)
+        td_err = self.batch_error_fn(q_s0, batch.actions, effective_rewards, jnp.where(batch.terminals, 0., effective_gamma), q_s1, batch.next_actions)
         return mse(td_err)
 
     @partial(jit, static_argnums=0)
