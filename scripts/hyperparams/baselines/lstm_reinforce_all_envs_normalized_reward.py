@@ -1,10 +1,10 @@
 hparams = {
     'file_name':
-        'vanilla_rnn_sarsa_all_envs.txt',
+        'lstm_reinforce_all_envs_normalized_reward.txt',
     'entry':
         '-m grl.baselines.run',
     'args': [{
-        'algo': 'vanilla_rnn_sarsa',
+        'algo': 'lstm_reinforce',
         'spec': [
             'tiger-alt-start',
             'network',
@@ -16,11 +16,10 @@ hparams = {
             'hallway',
             'cheese.95',
         ],
+        'normalize_reward_range': True,
         'gamma_terminal': True,
-        'num_updates': int(2e6),
+        'num_updates': int(1.5e5),
         'hidden_size': 12,
-        'start_epsilon': 0.1,
-        'epsilon': 0.1,
         'alpha': 0.001,
         'trunc_len': 100, # currently unused
         'seed': [2020 + i for i in range(10)],

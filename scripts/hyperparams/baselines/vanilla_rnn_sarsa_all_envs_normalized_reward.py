@@ -16,6 +16,7 @@ hparams = {
             'hallway',
             'cheese.95',
         ],
+        'normalize_reward_range': True,
         'gamma_terminal': True,
         'num_updates': int(2e6),
         'hidden_size': 12,
