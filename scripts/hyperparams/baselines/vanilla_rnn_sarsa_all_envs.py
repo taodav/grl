@@ -18,7 +18,7 @@ hparams = {
             'cheese.95',
         ],
         'gamma_terminal': True,
-        'num_updates': int(5e5),
+        'num_updates': int(2e6),
         'hidden_size': 12,
         'start_epsilon': 0.1,
         'epsilon': 0.1,
