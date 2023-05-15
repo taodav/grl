@@ -1,6 +1,6 @@
 hparams = {
     'file_name':
-        'lstm_all_envs.txt',
+        'lstm_reinforce_all_envs.txt',
     'entry':
         '-m grl.baselines.run',
     'args': [{

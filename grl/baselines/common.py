@@ -15,7 +15,7 @@ class DQNArgs:
     gamma: float
     rand_key: random.PRNGKey
     epsilon: float = 0.1
-    epsilon_start: float = 1.
+    epsilon_start: float = 0.1
     anneal_steps: int = 0
     optimizer: str = "adam"
     alpha: float = 0.01
@@ -44,6 +44,29 @@ class SimpleNN(hk.Module):
 
 def create_simple_nn_func(n_out):
      func = lambda x: SimpleNN(n_out)(x)
+     return func
+
+class ManagedVanillaRNN(hk.Module):
+    def __init__(self, hidden_size, output_size, name="managed_vanilla_rnn"):
+        super().__init__(name=name)
+        init = hk.initializers.VarianceScaling(np.sqrt(2), 'fan_avg', 'uniform')
+        b_init = hk.initializers.Constant(0)
+        self._rnn = hk.VanillaRNN(hidden_size)
+
+        self._linear_1 = hk.Linear(output_size, w_init=init, b_init=b_init)
+        self._linear_2 = hk.Linear(output_size, w_init=init, b_init=b_init)
+    
+    def __call__(self, x, h):
+        output, next_h = hk.dynamic_unroll(self._rnn, x, h, time_major=False)
+        out_dict = {
+             'td0': hk.BatchApply(self._linear_1)(output),
+             'td1': hk.BatchApply(self._linear_2)(output),
+             'h': next_h
+        }
+        return out_dict
+    
+def create_managed_vanilla_rnn_func(hidden_size, n_out):
+     func = lambda x, h: ManagedVanillaRNN(hidden_size, n_out)(x, h)
      return func
 
 class ManagedLSTM(hk.Module):

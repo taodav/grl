@@ -1,10 +1,10 @@
 hparams = {
     'file_name':
-        'lstm_sarsa_all_envs.txt',
+        'vanilla_rnn_sarsa_all_envs.txt',
     'entry':
         '-m grl.baselines.run',
     'args': [{
-        'algo': 'lstm_sarsa',
+        'algo': 'vanilla_rnn_sarsa',
         'spec': [
             'tiger-alt-start',
             'network',
@@ -18,7 +18,7 @@ hparams = {
             'cheese.95',
         ],
         'gamma_terminal': True,
-        'num_updates': int(1.5e5),
+        'num_updates': int(5e5),
         'hidden_size': 12,
         'start_epsilon': 0.1,
         'epsilon': 0.1,

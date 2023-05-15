@@ -11,10 +11,11 @@ from time import time
 from grl.environment import load_spec
 from grl.utils.file_system import results_path, numpyify_and_save
 from grl.run import add_tmaze_hyperparams
-from grl.baselines import create_simple_nn_func, create_managed_lstm_func, DQNArgs
+from grl.baselines import create_simple_nn_func, create_managed_lstm_func, create_managed_vanilla_rnn_func, DQNArgs
 from grl.baselines.dqn_agent import DQNAgent, train_dqn_agent
 from grl.baselines.rnn_agent import LSTMAgent, train_rnn_agent
 from grl.baselines.reinforce import LSTMReinforceAgent, train_reinforce_agent
+from grl.baselines.vanilla_rnn_agent import VanillaRNNAgent, train_vanilla_rnn_agent
 from grl import MDP, AbstractMDP
 
 if __name__ == '__main__':
@@ -42,7 +43,7 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', default=0.001, type=float)
     parser.add_argument('--epsilon', default=0.1, type=float,
                         help='What (ending, if annealing) epsilon do we use?')
-    parser.add_argument('--start_epsilon', default=None, type=float,
+    parser.add_argument('--start_epsilon', default=0.1, type=float,
                         help='For epsilon annealing: What starting epsilon to use?')
     parser.add_argument('--epsilon_anneal_steps', default=0, type=int,
                         help='For epsilon annealing: anneal over how many steps?')
@@ -167,6 +168,30 @@ if __name__ == '__main__':
         agent = LSTMReinforceAgent(transformed, args.hidden_size, agent_args)
 
         logs, agent_args = train_reinforce_agent(pomdp, agent, args.num_updates)
+    
+    elif args.algo == 'vanilla_rnn_sarsa':
+        # RNN uses the pomdp
+        rnn_func = create_managed_vanilla_rnn_func(args.hidden_size, pomdp.n_actions)
+
+        transformed = hk.without_apply_rng(hk.transform(rnn_func))
+
+        rand_key = random.PRNGKey(2023)
+        rand_key, subkey = random.split(rand_key)
+        agent_args = DQNArgs((pomdp.n_obs,),
+                            pomdp.n_actions,
+                            pomdp.gamma,
+                            subkey,
+                            algo = "sarsa",
+                            trunc_len=args.trunc_len,
+                            alpha=args.alpha,
+                            epsilon=args.epsilon,
+                            epsilon_start=args.start_epsilon,
+                            anneal_steps=args.epsilon_anneal_steps,
+                            gamma_terminal = args.gamma_terminal,
+                            save_path = agents_path,)
+        agent = VanillaRNNAgent(transformed, args.hidden_size, agent_args)
+
+        logs, agent_args = train_vanilla_rnn_agent(pomdp, agent, args.num_updates)
 
     else:
         raise NotImplementedError(f"Error: baseline algorithm {args.algo} not recognized")
