@@ -1,6 +1,6 @@
 import numpy as np
 from jax.tree_util import register_pytree_node_class
-from typing import Union
+from typing import Union, List
 
 @register_pytree_node_class
 class JaxBatch:
@@ -10,13 +10,13 @@ class JaxBatch:
     and convert into JAX representation internally.
     """
     def __init__(self,
-                 all_obs:  Union[np.ndarray, list[np.ndarray]] = [],
-                 obs: Union[np.ndarray, list[np.ndarray]] = [],
-                 actions: Union[np.ndarray, list[int]] = [],
-                 next_obs: Union[np.ndarray, list[np.ndarray]] = [],
-                 terminals: Union[np.ndarray, list[bool]] = [],
-                 rewards: Union[np.ndarray, list[float]] = [],
-                 next_actions: Union[np.ndarray, list[int]] = []) -> None:
+                 all_obs:  Union[np.ndarray, List[np.ndarray]] = [],
+                 obs: Union[np.ndarray, List[np.ndarray]] = [],
+                 actions: Union[np.ndarray, List[int]] = [],
+                 next_obs: Union[np.ndarray, List[np.ndarray]] = [],
+                 terminals: Union[np.ndarray, List[bool]] = [],
+                 rewards: Union[np.ndarray, List[float]] = [],
+                 next_actions: Union[np.ndarray, List[int]] = []) -> None:
         args = [all_obs, obs, actions, next_obs, terminals, rewards, next_actions]
         tlist = [type(x) for x in args]
         tmap = set(tlist)
