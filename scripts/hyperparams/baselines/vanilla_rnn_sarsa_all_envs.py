@@ -13,7 +13,6 @@ hparams = {
             '4x3.95',
             'shuttle.95',
             'paint.95',
-            'bridge-repair',
             'hallway',
             'cheese.95',
         ],
