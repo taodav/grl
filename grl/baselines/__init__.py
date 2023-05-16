@@ -65,7 +65,7 @@ class ManagedLSTM(hk.Module):
 
         return {
             'td0': hk.BatchApply(self._linear)(outputs),
-            'td1': hk.BatchApply(self._second_linear)(outputs),
+            'td_lambda': hk.BatchApply(self._second_linear)(outputs),
             'cell_state': cell_state
         }
 

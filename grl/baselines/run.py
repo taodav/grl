@@ -69,7 +69,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=None, type=int,
         help='seed for random number generators')
     parser.add_argument('--lstm_mode', default='td0', type=str,
-        help='Either td0, both, or lambda. Defines lstm loss')
+        help='Either td0, td_lambda, both, or lambda. Defines lstm loss')
     parser.add_argument('--lambda_coefficient', default=1.0, type=float,
         help='How much weight to give the lambda discrepancy')
     parser.add_argument('--reward_scale', default=1.0, type=float,

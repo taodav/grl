@@ -65,7 +65,7 @@ class LSTMAgent(DQNAgent):
                  reward_scale : float =1.0):
         # td0 mode means just training on TD0 loss. Both means train on both TD0 and TD1.
         # lambda means train on both, and then add lambda-discrepancy as aux term.
-        assert mode in ('td0', 'both', 'lambda'), mode
+        assert mode in ('td0', 'td_lambda', 'both', 'lambda'), mode
         self.mode = mode
         self.lambda_coefficient = lambda_coefficient
         self.reward_scale = reward_scale
@@ -177,7 +177,10 @@ class LSTMAgent(DQNAgent):
         :param network_params: NN parameters to use to calculate Q.
         :return: (b x time_steps) Greedy actions
         """
-        qs, new_h = self.Qs(obs, h, network_params)
+        if self.mode == 'td_lambda':
+            qs, new_h = self.Qs_td_lambda(obs, h, network_params)
+        else:
+            qs, new_h = self.Qs(obs, h, network_params)
         return jnp.argmax(qs, -1), qs, new_h
 
     
@@ -191,7 +194,7 @@ class LSTMAgent(DQNAgent):
         output = self.network.apply(network_params, obs, h)
         return output['td0'], output['cell_state']
 
-    def Qs_MC(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
+    def Qs_td_lambda(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params) -> jnp.ndarray:
         """
         Get all Q-values given a obs, from TD(0)
         :param obs: (b x time_steps x *obs.shape) obs to find action-values
@@ -199,9 +202,9 @@ class LSTMAgent(DQNAgent):
         :return: (b x time_steps x actions) torch.tensor full of action-values.
         """
         output = self.network.apply(network_params, obs, h)
-        return output['td1'], output['cell_state']
+        return output['td_lambda'], output['cell_state']
 
-    def MC_and_TD_Qs(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params):
+    def both_Qs(self, obs: jnp.ndarray, h: hk.LSTMState, network_params: hk.Params):
         # Dict with keys [td0, td1, cell_state]
         return self.network.apply(network_params, obs, h)
 
@@ -221,39 +224,40 @@ class LSTMAgent(DQNAgent):
              batch: JaxBatch,
              mode: str = 'td0'):
         #(B x T x A)
-        mc_td_qs = self.MC_and_TD_Qs(batch.all_obs, initial_hidden, network_params)
-        td_q_all, mc_q_all = mc_td_qs['td0'], mc_td_qs['td1']
+        both_qs_dict = self.both_Qs(batch.all_obs, initial_hidden, network_params)
+        td0_q_all, td_lambda_q_all = both_qs_dict['td0'], both_qs_dict['td_lambda']
         # q_all, _ = self.Qs(batch.all_obs, initial_hidden, network_params)
-        td_q_s0 = td_q_all[:, :-1, :]
-        td_q_s1 = td_q_all[:, 1:, :]
+        td0_q_s0 = td0_q_all[:, :-1, :]
+        td0_q_s1 = td0_q_all[:, 1:, :]
 
-        mc_q_s0 = mc_q_all[:, :-1, :]
+        td_lambda_q_s0 = td_lambda_q_all[:, :-1, :]
 
         # td0_err
         effective_gamma = jax.lax.select(self.args.gamma_terminal, 1., self.gamma)
         effective_rewards = batch.rewards * self.reward_scale
 
-        td0_err = self.batch_td_error_fn(td_q_s0, batch.actions, effective_rewards,
+        td0_err = self.batch_td_error_fn(td0_q_s0, batch.actions, effective_rewards,
                                       jnp.where(batch.terminals, 0., effective_gamma),
-                                      td_q_s1, batch.next_actions)
-        td1_err = self.batch_mc_error_fn(mc_q_s0, batch.actions, effective_rewards,
+                                      td0_q_s1, batch.next_actions)
+        td_lambda_err = self.batch_mc_error_fn(td_lambda_q_s0, batch.actions, effective_rewards,
                                       jnp.where(batch.terminals, 0., effective_gamma),
                                       batch.next_actions)
 
-        lambda_err = self.batch_lambda_error_fn(td_q_s0, mc_q_s0, batch.actions)
-        td0_err, td1_err, lambda_err = mse(td0_err), mse(td1_err), mse(lambda_err)
+        lambda_err = self.batch_lambda_error_fn(td0_q_s0, td_lambda_q_s0, batch.actions)
+        td0_err, td_lambda_err, lambda_err = mse(td0_err), mse(td_lambda_err), mse(lambda_err)
         if mode == 'td0':
-            # main_loss =  mse(td0_err)
             main_loss =  td0_err
+        elif mode == 'td_lambda':
+            main_loss = td_lambda_err
         elif mode == 'both':
-            # main_loss = mse(td0_err) + mse(td1_err)
-            main_loss = td0_err + td1_err
+            # main_loss = mse(td0_err) + mse(td_lambda_err)
+            main_loss = td0_err + td_lambda_err
         else:
-            main_loss =  td0_err + td1_err + (self.lambda_coefficient * lambda_err)
+            main_loss =  td0_err + td_lambda_err + (self.lambda_coefficient * lambda_err)
 
         return main_loss, {
             'td0_loss': td0_err,
-            'td1_loss': td1_err,
+            'td_lambda_loss': td_lambda_err,
             'lambda_loss': lambda_err,
         }
 
@@ -402,7 +406,7 @@ def train_rnn_agent(mdp: MDP,
                 with open(str(args.save_path) + f'ep_{num_eps}.pkl', "wb") as dill_file:
                     dill.dump(agent, dill_file)
             # print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | Obs {batch.obs} | Q-vals {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
-            print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | \n Q-vals (TD) {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]} \n Q-vals (MC) {agent.Qs_MC(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
+            print(f"Step {steps} | Episode {num_eps} | Epsilon {agent.eps} | Loss {loss} | Avg Length {avg_len} | Reward {batch.rewards} | Success/Fail/Neutral {pct_success}/{pct_fail}/{pct_neutral} | \n Q-vals (TD(0)) {agent.Qs(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]} \n Q-vals (TD(lambda)) {agent.Qs_td_lambda(batch.obs, agent.get_initial_hidden_state(), agent.network_params)[0]}")
         
         num_eps = num_eps + 1
        
