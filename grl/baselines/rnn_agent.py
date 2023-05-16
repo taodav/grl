@@ -60,7 +60,7 @@ def seq_sarsa_lambda_error(qtd: jnp.ndarray, qmc: jnp.ndarray, a: jnp.ndarray):
     return q_vals_td - q_vals_mc
 
 def seq_sarsa_lambda_returns_error(q: jnp.ndarray, a: jnp.ndarray, r: jnp.ndarray,
-                                   g: jnp.ndarray, v_t: jnp.ndarray, lambda_: float = 1.):
+                                   g: jnp.ndarray, v_t: jnp.ndarray, lambda_: float):
     # If scalar make into vector.
     lambda_ = jnp.ones_like(g) * lambda_
 
@@ -123,7 +123,8 @@ class LSTMAgent(DQNAgent):
             self.batch_td_error_fn = vmap(self.td_error_fn)
             self.batch_mc_error_fn = vmap(seq_sarsa_mc_error)
             if self.lambda_1 < 1.:
-                self.batch_mc_error_fn = vmap(seq_sarsa_lambda_returns_error)
+                self.batch_mc_error_fn = vmap(seq_sarsa_lambda_returns_error,
+                                              in_axes=(0, 0, 0, 0, 0, None))
             self.batch_lambda_error_fn = vmap(seq_sarsa_lambda_error)
         else:
             raise NotImplementedError(f"Unrecognized learning algorithm {args.algo}")
@@ -267,10 +268,10 @@ class LSTMAgent(DQNAgent):
         if self.lambda_1 < 1.:
             # TODO: get vs
             next_pis = batch.pis[:, 1:]
-            next_vs = jnp.einsum('ijk,ik->ij', td_lambda_q_s0[:, 1:, :], next_pis)
+            next_vs = jnp.einsum('ijk,ijk->ij', td_lambda_q_s0[:, 1:, :], next_pis)
             td_lambda_err = self.batch_mc_error_fn(td_lambda_q_s0, batch.actions, effective_rewards,
                                              jnp.where(batch.terminals, 0., effective_gamma),
-                                             next_vs)
+                                             next_vs, self.lambda_1)
         else:
             td_lambda_err = self.batch_mc_error_fn(td_lambda_q_s0, batch.actions, effective_rewards,
                 jnp.where(batch.terminals, 0., effective_gamma),
@@ -371,7 +372,7 @@ def train_rnn_agent(mdp: MDP,
         a_0, policy = agent.act(np.array([[o_0_processed]]), return_policy=True)
         a_0 = a_0[-1][-1]
         all_actions.append(a_0)
-        all_pis.append(policy)
+        all_pis.append(policy[-1][-1])
         
         # TODO no truncation length
         # For PR: is this functionality that we want to make optional?
@@ -389,7 +390,7 @@ def train_rnn_agent(mdp: MDP,
             a_1, policy = agent.act(np.array([[o_1_processed]]), return_policy=True)
             a_1 = a_1[-1][-1]
             all_actions.append(a_1)
-            all_pis.append(policy)
+            all_pis.append(policy[-1][-1])
             
             # if done:
             #     #print(f"Broke early after {t} steps")
