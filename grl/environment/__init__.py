@@ -26,7 +26,7 @@ def get_env(args: Namespace,
             if args.feature_encoding == 'one_hot':
                 env = OneHotObservationWrapper(env)
 
-        except NotImplementedError:
+        except AttributeError:
             # try to load from popgym
             # validate input: we need a custom gamma for popgym args as they don't come with a gamma
             if args.gamma is None:
