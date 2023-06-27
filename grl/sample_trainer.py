@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from grl.evaluation import eval_episodes
 from grl.mdp import MDP, AbstractMDP
+from grl.environment.wrappers.gamma_terminal import GammaTerminalWrapper
 from grl.agent.rnn import RNNAgent
 from grl.utils.data import Batch, one_hot, compress_episode_rewards
 from grl.utils.mdp import all_t_discounted_returns
@@ -19,7 +20,7 @@ from grl.utils.replaymemory import EpisodeBuffer
 
 class Trainer:
     def __init__(self,
-                 env: Union[MDP, AbstractMDP],
+                 env: Union[MDP, AbstractMDP, GammaTerminalWrapper],
                  agent: RNNAgent,
                  rand_key: random.PRNGKey,
                  args: Namespace,
