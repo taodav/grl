@@ -8,13 +8,13 @@ from functools import partial
 
 from grl.agent.analytical import AnalyticalAgent
 from grl.utils.lambda_discrep import lambda_discrep_measures
-from grl.mdp import AbstractMDP, MDP
+from grl.mdp import POMDP, MDP
 from grl.memory import memory_cross_product
 from grl.utils.math import glorot_init, greedify
 from grl.utils.loss import discrep_loss
 from grl.vi import td_pe
 
-def run_memory_iteration(spec: dict,
+def run_memory_iteration(amdp: POMDP,
                          mem_params: jnp.ndarray,
                          policy_optim_alg: str = 'policy_iter',
                          optimizer_str: str = 'sgd',
@@ -36,7 +36,7 @@ def run_memory_iteration(spec: dict,
     """
     Wrapper function for the Memory Iteration algorithm.
     Memory iteration intersperses memory improvement and policy improvement.
-    :param spec:                POMDP specification.
+    :param amdp:                POMDP to do memory iteration on.
     :param pi_lr:               Policy improvement learning rate
     :param mi_lr:               Memory improvement learning rate
     :param policy_optim_alg:    Which policy improvement algorithm do we use?
@@ -50,21 +50,15 @@ def run_memory_iteration(spec: dict,
     :param lambda_1:            What's our second lambda parameter for lambda discrep?
     :param alpha:               How uniform do we want our lambda discrep weighting?
     """
-    assert amdp.current_state is None, \
-        f"AbstractMDP should be stateless and current_state should be None, got {amdp.current_state} instead"
-
-    # initialize policy params
-    if 'Pi_phi' not in spec or spec['Pi_phi'] is None:
-        pi_phi_shape = (spec['phi'].shape[-1], spec['T'].shape[0])
-    else:
-        pi_phi_shape = spec['Pi_phi'][0].shape
+    assert isinstance(amdp, POMDP) and amdp.current_state is None, \
+        f"POMDP should be stateless and current_state should be None, got {amdp.current_state} instead"
 
     # If pi_params is initialized, we start with some given
     # policy params and don't do the first policy improvement step.
     init_pi_improvement = False
     if pi_params is None:
         init_pi_improvement = True
-        pi_params = glorot_init(pi_phi_shape, scale=0.2)
+        pi_params = glorot_init((amdp.observation_space.n, amdp.action_space.n), scale=0.2)
     initial_policy = softmax(pi_params, axis=-1)
 
     agent = AnalyticalAgent(pi_params,
@@ -140,7 +134,7 @@ def run_memory_iteration(spec: dict,
 
 def memory_iteration(
     agent: AnalyticalAgent,
-    init_amdp: AbstractMDP,
+    init_amdp: POMDP,
     pi_per_step: int = 50000,
     mi_per_step: int = 50000,
     mi_iterations: int = 1,
@@ -264,7 +258,7 @@ def memory_iteration(
     return info, agent
 
 def pi_improvement(agent: AnalyticalAgent,
-                   amdp: AbstractMDP,
+                   amdp: POMDP,
                    iterations: int = 10000,
                    log_every: int = 1000,
                    progress_bar: bool = True) -> dict:
@@ -292,7 +286,7 @@ def pi_improvement(agent: AnalyticalAgent,
     return output
 
 def mem_improvement(agent: AnalyticalAgent,
-                    amdp: AbstractMDP,
+                    amdp: POMDP,
                     iterations: int = 10000,
                     log_every: int = 1000,
                     progress_bar: bool = True) -> np.ndarray:

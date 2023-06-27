@@ -7,7 +7,7 @@ import numpy as np
 from grl.agent import get_agent, RNNAgent
 from grl.environment import get_env
 from grl.evaluation import eval_episodes
-from grl.mdp import MDP, AbstractMDP
+from grl.mdp import MDP, POMDP
 from grl.model import get_network
 from grl.run_sample_based import parse_arguments
 from grl.sample_trainer import Trainer
@@ -15,7 +15,7 @@ from grl.utils.data import uncompress_episode_rewards
 from grl.utils.optimizer import get_optimizer
 from grl.environment.wrappers import GammaTerminalWrapper
 
-def train_agent(rand_key: jax.random.PRNGKey, args: Namespace, env: Union[MDP, AbstractMDP, GammaTerminalWrapper]) \
+def train_agent(rand_key: jax.random.PRNGKey, args: Namespace, env: Union[MDP, POMDP, GammaTerminalWrapper]) \
         -> Tuple[RNNAgent, dict, jax.random.PRNGKey]:
     network = get_network(args, env.action_space.n)
 
@@ -208,12 +208,12 @@ def test_actions():
 
         final_eval_rewards_compressed = final_eval_info['episode_rewards']
 
-        for compressed_ep_rews in final_eval_rewards_compressed:
-            ep_rews = uncompress_episode_rewards(compressed_ep_rews['episode_length'],
-                                                 compressed_ep_rews['most_common_reward'],
-                                                 compressed_ep_rews['compressed_rewards'])
+        for compressed_ep_rewards in final_eval_rewards_compressed:
+            ep_rewards = uncompress_episode_rewards(compressed_ep_rewards['episode_length'],
+                                                    compressed_ep_rewards['most_common_reward'],
+                                                    compressed_ep_rewards['compressed_rewards'])
 
-            assert sum(ep_rews) == 4., f"Optimal actions don't match for " \
+            assert sum(ep_rewards) == 4., f"Optimal actions don't match for " \
                                        f"loss_mode: {loss_mode}, action_mode: {action_mode}"
             
 def test_popgym_integration_discrete():
@@ -256,17 +256,17 @@ def test_popgym_integration_discrete():
 
         final_eval_rewards_compressed = final_eval_info['episode_rewards']
 
-        for compressed_ep_rews in final_eval_rewards_compressed:
-            ep_rews = uncompress_episode_rewards(compressed_ep_rews['episode_length'],
-                                                 compressed_ep_rews['most_common_reward'],
-                                                 compressed_ep_rews['compressed_rewards'])
+        for compressed_ep_rewards in final_eval_rewards_compressed:
+            ep_rewards = uncompress_episode_rewards(compressed_ep_rewards['episode_length'],
+                                                 compressed_ep_rewards['most_common_reward'],
+                                                 compressed_ep_rewards['compressed_rewards'])
 
             # TODO not sure what to evaluate here - this assertion doesn't pass reliably.
             # I think there might be a bug in the POPGym library - it claims this env
             # should output a remember indicator on the first observation but that doesn't appear to be true.
             # Not sure if this is a problem; or, if it is a problem, if it's this test's problem.
             
-            # assert sum(ep_rews) > -1., f"Model didn't seem to learn for " \
+            # assert sum(ep_rewards) > -1., f"Model didn't seem to learn for " \
             #                            f"loss_mode: {loss_mode}, action_mode: {action_mode}"
 
 def test_popgym_integration_continuous():
@@ -309,14 +309,14 @@ def test_popgym_integration_continuous():
 
         final_eval_rewards_compressed = final_eval_info['episode_rewards']
 
-        for compressed_ep_rews in final_eval_rewards_compressed:
-            ep_rews = uncompress_episode_rewards(compressed_ep_rews['episode_length'],
-                                                 compressed_ep_rews['most_common_reward'],
-                                                 compressed_ep_rews['compressed_rewards'])
+        for compressed_ep_rewards in final_eval_rewards_compressed:
+            ep_rewards = uncompress_episode_rewards(compressed_ep_rewards['episode_length'],
+                                                 compressed_ep_rewards['most_common_reward'],
+                                                 compressed_ep_rewards['compressed_rewards'])
 
             # TODO again, I don't know if we expect these small-capacity models to do anything on these problems.
             # Integration seems to work but IDK what to assert.
-            # assert sum(ep_rews) > 0.1, f"Model didn't seem to learn for " \
+            # assert sum(ep_rewards) > 0.1, f"Model didn't seem to learn for " \
             #                            f"loss_mode: {loss_mode}, action_mode: {action_mode}"
 
 if __name__ == "__main__":

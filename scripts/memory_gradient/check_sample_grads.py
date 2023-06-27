@@ -11,20 +11,20 @@ from tqdm import tqdm
 
 from grl.environment import load_spec
 from grl.memory import memory_cross_product, get_memory
-from grl.mdp import MDP, AbstractMDP
+from grl.mdp import MDP, POMDP
 from grl.utils.loss import obs_space_mem_discrep_loss
 from grl.utils.mdp import get_td_model
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy_eval import lstdq_lambda
 
-from scripts.check_traj_grads import mem_traj_prob
+from scripts.memory_gradient.check_traj_grads import mem_traj_prob
 from scripts.variance_calcs import collect_episodes
-from scripts.val_grad_unit_tests import mem_obs_val_func, calc_all_unrolled_val_grads
-from scripts.intermediate_sample_grads import mem_func
+from scripts.memory_gradient.val_grad_unit_tests import mem_obs_val_func, calc_all_unrolled_val_grads
+from scripts.memory_gradient.intermediate_sample_grads import mem_func
 
 @partial(jax.jit, static_argnames=['obs', 'lambda_0'])
 def mem_packed_v(mem_params: jnp.ndarray,
-                 amdp: AbstractMDP,
+                 amdp: POMDP,
                  pi: jnp.ndarray,
                  obs: int,
                  lambda_0: float = 0.):
@@ -51,7 +51,7 @@ def mem_packed_v(mem_params: jnp.ndarray,
     return reformed_lambda_0_v_vals[obs]
 
 @partial(jax.jit, static_argnames=['obs', 'action'])
-def prob_mem_over_obs(mem_params: jnp.ndarray, mem_aug_pi: jnp.ndarray, mem_aug_amdp: AbstractMDP,
+def prob_mem_over_obs(mem_params: jnp.ndarray, mem_aug_pi: jnp.ndarray, mem_aug_amdp: POMDP,
                       obs: int, mem: int):
     n_mem_states = mem_params.shape[-1]
 
@@ -70,7 +70,7 @@ def prob_mem_over_obs(mem_params: jnp.ndarray, mem_aug_pi: jnp.ndarray, mem_aug_
     return prob_mem_given_o[obs, mem]
 
 def lambda_discrep_loss(mem_params: jnp.ndarray,
-                        amdp: AbstractMDP,
+                        amdp: POMDP,
                         lstd_v1: jnp.ndarray,
                         pi: jnp.ndarray,
                         obs: int,
@@ -102,7 +102,7 @@ def calc_all_mem_grads(mem_params: jnp.ndarray, init_mem_belief: jnp.ndarray,
 def calc_val_diff(v0_unflat: jnp.ndarray, mem_belief: jnp.ndarray, v1: jnp.ndarray, obs: int):
     return jnp.dot(v0_unflat[obs], mem_belief) - v1[obs]
 
-def calc_product_rule(mem_params: jnp.ndarray, mem_aug_pi: jnp.ndarray, mem_aug_amdp: AbstractMDP,
+def calc_product_rule(mem_params: jnp.ndarray, mem_aug_pi: jnp.ndarray, mem_aug_amdp: POMDP,
                       mem_lstd_v0_unflat: jnp.ndarray, all_om_val_grads: jnp.ndarray,
                       lstd_v1: jnp.ndarray, obs: int):
     n_mem = mem_params.shape[-1]
@@ -156,9 +156,9 @@ def check_samples():
                      epsilon=epsilon)
 
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'])
-    amdp = AbstractMDP(mdp, spec['phi'])
+    amdp = POMDP(mdp, spec['phi'])
 
-    mem_params = get_memory('f',
+    mem_params = get_memory('fuzzy',
                             n_obs=amdp.observation_space.n,
                             n_actions=amdp.action_space.n,
                             leakiness=0.2)
@@ -227,10 +227,8 @@ def check_samples():
                                        n_mem) + mem_params.shape)
 
             print(f"Calculating memory grads for update {g}")
-            for o, m in tqdm(
-                    list(product(list(range(amdp.observation_space.n)), list(range(n_mem))))):
-                for a, next_m in list(product(list(range(amdp.action_space.n)),
-                                              list(range(n_mem)))):
+            for o, m in tqdm(list(product(range(amdp.observation_space.n), range(n_mem)))):
+                for a, next_m in product(range(amdp.action_space.n), range(n_mem)):
                     all_mem_grads = all_mem_grads.at[m, o, a, next_m].set(
                         mem_grad_fn(mem_params, o, a, m, next_m))
 
@@ -287,18 +285,20 @@ def check_samples():
 
                 # repacked_mem_v_obs, grad = mem_packed_v_grad_fn(mem_params, amdp, mem_aug_pi, obs)
                 # eps_sampled_grads += (repacked_mem_v_obs - lstd_v1[obs]) * grad
+
                 # eps_sampled_grads += lambda_discrep_grad_fn(mem_params, amdp, lstd_v1, mem_aug_pi, obs)
 
-                # mem_mat = mem_probs[action, obs]
-                # mem_belief = mem_belief @ mem_mat
+                mem_mat = mem_probs[action, obs]
+                mem_belief = mem_belief @ mem_mat
 
-            # else:
-            #     obs = ep['obses'][-1]
-            #
-            #     val_diff = calc_val_diff(mem_lstd_v0_unflat, mem_belief, lstd_v1, obs)
-            #     val_grad, traj_grad = calc_all_mem_grads(mem_params, init_mem_belief, all_om_val_grads,
-            #                                              mem_lstd_v0_unflat, ep, t + 1)
-            #     eps_sampled_grads += (val_diff * (traj_grad + val_grad))
+            else:
+                obs = ep['obses'][-1]
+
+                val_diff = calc_val_diff(mem_lstd_v0_unflat, mem_belief, lstd_v1, obs)
+                val_grad, traj_grad = calc_all_mem_grads(mem_params, init_mem_belief,
+                                                         all_om_val_grads, mem_lstd_v0_unflat, ep,
+                                                         t + 1)
+                eps_sampled_grads += (val_diff * (traj_grad + val_grad))
 
             eps_sampled_grads /= (ep['obses'].shape[0] - 1)
             sampled_grads += eps_sampled_grads

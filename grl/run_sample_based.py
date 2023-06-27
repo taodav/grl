@@ -7,7 +7,7 @@ from jax.config import config
 from grl.agent import get_agent
 from grl.environment import get_env
 from grl.evaluation import eval_episodes
-from grl.mdp import AbstractMDP, MDP
+from grl.mdp import POMDP, MDP
 from grl.model import get_network
 from grl.sample_trainer import Trainer
 from grl.utils.data import uncompress_episode_rewards
@@ -35,7 +35,7 @@ def parse_arguments(return_defaults: bool = False):
                         choices=['rnn', 'multihead_rnn'],
                         help='Algorithm to evaluate')
     parser.add_argument('--arch', default='gru', type=str,
-                        choices=['gry', 'lstm', 'elman'],
+                        choices=['gru', 'lstm', 'elman'],
                         help='Algorithm to evaluate')
     parser.add_argument('--epsilon', default=0.1, type=float,
                         help='What epsilon do we use?')
@@ -126,12 +126,16 @@ if __name__ == "__main__":
     if args.seed is not None:
         np.random.seed(args.seed)
         rand_key = jax.random.PRNGKey(args.seed)
-        np_rand_key = np.random.RandomState(seed=args.seed)
+        np_rand_state = np.random.RandomState(seed=args.seed)
     else:
         rand_key = jax.random.PRNGKey(np.random.randint(1, 10000))
 
     # Load environment and env wrappers
-    env = get_env(args, rand_key=np_rand_key)
+    env_key, test_env_key, rand_key = jax.random.split(rand_key, num=3)
+    env = get_env(args, rand_state=np_rand_key, rand_key=env_key)
+    test_env = None
+    if args.offline_eval_freq is not None:
+        test_env = get_env(args, rand_state=np_rand_key, rand_key=test_env_key)
 
     results_path = results_path(args)
     all_agents_dir = results_path.parent / 'agent'
@@ -146,7 +150,7 @@ if __name__ == "__main__":
     agent = get_agent(network, optimizer, env.observation_space.shape, env, args)
 
     trainer_key, rand_key = jax.random.split(rand_key)
-    trainer = Trainer(env, agent, trainer_key, args, checkpoint_dir=agents_dir)
+    trainer = Trainer(env, agent, trainer_key, args, test_env=test_env, checkpoint_dir=agents_dir)
 
     final_network_params, final_optimizer_params, episodes_info = trainer.train()
 
@@ -167,7 +171,7 @@ if __name__ == "__main__":
     info = {
         'episodes_info': episodes_info,
         'args': vars(args),
-        'final_eval_rews': final_eval_info['episode_rewards'],
+        'final_eval_rewards': final_eval_info['episode_rewards'],
         'final_eval_qs': final_eval_info['episode_qs']
     }
 

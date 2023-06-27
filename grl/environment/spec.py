@@ -1,11 +1,12 @@
 import inspect
 from pathlib import Path
+from typing import Tuple
 
 import numpy as np
 
 from definitions import ROOT_DIR
 from grl.environment.pomdp_file import POMDPFile
-from grl.mdp import MDP, AbstractMDP
+from grl.mdp import MDP, POMDP
 from grl.utils.math import normalize
 from . import examples_lib
 
@@ -42,8 +43,7 @@ def load_spec(name: str, **kwargs):
             file_path = Path(ROOT_DIR, 'grl', 'environment', 'pomdp_files', f'{name}.POMDP')
             spec = POMDPFile(file_path).get_spec()
         except FileNotFoundError as _:
-            raise NotImplementedError(
-                f'{name} not found in examples_lib.py nor pomdp_files/') from None
+            raise AttributeError
 
     # Check sizes and types
     if len(spec.keys()) < 6:
@@ -67,11 +67,11 @@ def load_spec(name: str, **kwargs):
 
     return spec
 
-def load_pomdp(name: str, rand_key: np.random.RandomState = None, **kwargs) -> AbstractMDP:
+def load_pomdp(name: str, rand_key: np.random.RandomState = None, **kwargs) -> Tuple[POMDP, dict]:
     """
     Wraps a MDP/POMDP specification in a POMDP
     """
     spec = load_spec(name, rand_key=rand_key, **kwargs)
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'], rand_key=rand_key)
-    amdp = AbstractMDP(mdp, spec['phi'])
-    return amdp, {'Pi_phi': spec['Pi_phi'][0], 'Pi_phi_x': spec['Pi_phi_x']}
+    amdp = POMDP(mdp, spec['phi'])
+    return amdp, {'Pi_phi': spec['Pi_phi'], 'Pi_phi_x': spec['Pi_phi_x']}

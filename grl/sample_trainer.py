@@ -1,9 +1,10 @@
 from argparse import Namespace
 from dataclasses import replace
 from pathlib import Path
-from typing import Union, List, Tuple
+from typing import List, Tuple
 import warnings
 
+import gymnasium as gym
 from jax import random
 import numpy as np
 import optax
@@ -11,21 +12,26 @@ from orbax import checkpoint
 from tqdm import tqdm
 
 from grl.evaluation import eval_episodes
-from grl.mdp import MDP, AbstractMDP
-from grl.environment.wrappers.gamma_terminal import GammaTerminalWrapper
+from grl.mdp import MDP, POMDP
+from grl.environment.wrappers import GammaTerminalWrapper
 from grl.agent.rnn import RNNAgent
-from grl.utils.data import Batch, one_hot, compress_episode_rewards
+from grl.environment import RockSample
+from grl.utils.data import Batch, compress_episode_rewards
 from grl.utils.mdp import all_t_discounted_returns
 from grl.utils.replaymemory import EpisodeBuffer
+from typing import Union
 
 class Trainer:
     def __init__(self,
-                 env: Union[MDP, AbstractMDP, GammaTerminalWrapper],
+                # arbitrary gym.Env doesn't accept gamma_terminal as their step() doesn't have **kwargs. Annoying.
+                 env: Union[MDP, POMDP, RockSample, GammaTerminalWrapper],
                  agent: RNNAgent,
                  rand_key: random.PRNGKey,
                  args: Namespace,
+                 test_env: gym.Env = None,
                  checkpoint_dir: Path = None):
         self.env = env
+        self.test_env = test_env
         self.agent = agent
         self.args = args
         self._rand_key = rand_key
@@ -122,7 +128,7 @@ class Trainer:
 
     def add_returns_to_batches(self, episode_rewards: List[float],
                                episode_experiences: List[Batch]) -> List[Batch]:
-        episode_rewards = np.array(episode_rewards)
+        episode_rewards = np.array(episode_rewards, dtype=float)
         if self.normalize_rewards:
             episode_rewards *= self.reward_scale
 
@@ -154,15 +160,13 @@ class Trainer:
         return network_params, optimizer_params, info
 
     def evaluate(self, network_params: dict) -> dict:
-        prev_state = self.env.current_state
         test_info, self._rand_key = eval_episodes(self.agent,
                                                   network_params,
-                                                  self.env,
+                                                  self.test_env,
                                                   self._rand_key,
                                                   n_episodes=self.offline_eval_episodes,
                                                   test_eps=self.offline_eval_epsilon,
                                                   max_episode_steps=self.max_episode_steps)
-        self.env.current_state = prev_state
         return test_info
 
     def train(self):
@@ -188,14 +192,14 @@ class Trainer:
 
             action, self._rand_key, hs, qs = self.agent.act(network_params, obs, prev_hs,
                                                             self._rand_key)
-            action = action.item()
+            action = action.astype(int).item()
 
             for t in range(self.max_episode_steps):
                 next_obs, reward, done, _, info = self.env.step(action,
                                                                 gamma_terminal=self.gamma_terminal)
                 next_action, self._rand_key, next_hs, qs = self.agent.act(
                     network_params, next_obs, hs, self._rand_key)
-                next_action = next_action.item()
+                next_action = next_action.astype(int).item()
 
                 experience = Batch(obs=obs,
                                    reward=reward,
@@ -223,7 +227,6 @@ class Trainer:
                     episode_info['total_episode_loss'] += info['total_loss']
                     episode_info['episode_updates'] += 1
 
-                pbar.update(1)
                 self.num_steps += 1
 
                 # Offline evaluation
@@ -267,6 +270,7 @@ class Trainer:
 
             avg_episode_loss = episode_info['total_episode_loss'] / max(
                 episode_info['episode_updates'], 1)
+            pbar.update(t + 1)
             print(self.episode_stat_string(sum(episode_reward), avg_episode_loss, t))
 
             if self.checkpoint_dir is not None and checkpoint_after_ep:
