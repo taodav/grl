@@ -41,6 +41,9 @@ def load_spec(name: str, **kwargs):
     if spec is None:
         try:
             file_path = Path(ROOT_DIR, 'grl', 'environment', 'pomdp_files', f'{name}.POMDP')
+            if not file_path.exists():
+                file_path = Path(ROOT_DIR, 'grl', 'environment', 'pomdp_files', f'{name}.pomdp')
+
             spec = POMDPFile(file_path).get_spec()
         except FileNotFoundError as _:
             raise AttributeError

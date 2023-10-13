@@ -91,6 +91,8 @@ class POMDPFile:
         if el == '*':
             return list(range(len(l)))
         else:
+            if el.isnumeric() and el not in l:
+                return int(el)
             return l.index(el)
 
     def __get_discount(self, i):
@@ -134,19 +136,28 @@ class POMDPFile:
         line = self.contents[i]
 
         # Check if values are on this line or the next line
-        if len(line.split()) == 1:
+        line_lst = line.split()
+        if len(line_lst) == 1:
             i += 1
             line = self.contents[i].split()
         else:
-            line = line.split()[1:]
+            line = line_lst[1:]
 
-        self.start = np.array(line).astype('float')
+        if 'include' in line[0]:
+            line = line[1:]
+            start_idxes = np.array(line).astype(int)
+            start = np.zeros(len(self.states), dtype=float)
+            start[start_idxes] = 1 / len(start_idxes)
+            self.start = start
+        else:
+            self.start = np.array(line).astype(float)
 
         return i + 1
 
     def __get_transition(self, i):
         line = self.contents[i]
-        pieces = [x for x in line.split() if (x.find(':') == -1)]
+        # pieces = [x for x in line.split() if (x.find(':') == -1)]
+        pieces = [x.strip(':') for x in line.split(' ') if x != ':'][1:]
         action = self.get_indices(self.actions, pieces[0])
 
         if len(pieces) == 4:
@@ -166,10 +177,19 @@ class POMDPFile:
             self.T[action, start_state, next_state] = prob
             return i + 2
         elif len(pieces) == 2:
-            # case 3: T: <action> : <start-state>
+            # case 3.1: T: <action> identity
+            if pieces[1] == 'identity':
+                for j in range(len(self.states)):
+                    for k in range(len(self.states)):
+                        prob = 1.0 if j == k else 0.0
+                        self.T[action, j, k] = prob
+                return i + 2
+
+            # case 3.2: T: <action> : <start-state>
             # %f %f ... %f
             if '*' in pieces[1]:
                 start_state = slice(None)
+
             else:
                 start_state = self.get_indices(self.states, pieces[1])
             next_line = self.contents[i + 1]
@@ -216,7 +236,7 @@ class POMDPFile:
 
     def __get_observation(self, i):
         line = self.contents[i]
-        pieces = [x for x in line.split() if (x.find(':') == -1)]
+        pieces = [x.strip(':') for x in line.split(' ') if x != ':'][1:]
         if pieces[0] == "*":
             # Case when action does not affect observation
             action = slice(None)
