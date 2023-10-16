@@ -60,6 +60,10 @@ if __name__ == '__main__':
                         help='For the leaky identity memory function, how leaky is it?')
     parser.add_argument('--n_mem_states', default=2, type=int,
                         help='for memory_id = 0, how many memory states do we have?')
+    parser.add_argument('--fix_and_add_bits', action='store_true',
+                        help='Do we fix our memory bits after each iteration?'
+                             'Requires n_mem_states // 2 == 0. '
+                             'mi_iteration becomes number of iterations per bit addition.')
     parser.add_argument('--lambda_0', default=0., type=float,
                         help='First lambda parameter for lambda-discrep')
     parser.add_argument('--lambda_1', default=1., type=float,
@@ -118,17 +122,16 @@ if __name__ == '__main__':
     # Get POMDP definition
     pomdp, pi_dict = load_pomdp(args.spec,
                                 memory_id=args.use_memory,
-                                n_mem_states=args.n_mem_states,
                                 corridor_length=args.tmaze_corridor_length,
                                 discount=args.tmaze_discount,
                                 junction_up_pi=args.tmaze_junction_up_pi,
-                                epsilon=args.epsilon,
-                                mem_leakiness=args.mem_leakiness)
+                                epsilon=args.epsilon)
 
+    init_n_mem_states = args.n_mem_states if not args.fix_and_add_bits else 2
     mem_params = get_memory(args.use_memory,
                             n_obs=pomdp.observation_space.n,
                             n_actions=pomdp.action_space.n,
-                            n_mem_states=args.n_mem_states,
+                            n_mem_states=init_n_mem_states,
                             leakiness=args.mem_leakiness)
 
     logging.info(f'spec:\n {args.spec}\n')
@@ -171,7 +174,10 @@ if __name__ == '__main__':
                                        epsilon=args.epsilon,
                                        pi_params=pi_params,
                                        kitchen_sink_policies=args.kitchen_sink_policies,
-                                       flip_count_prob=args.flip_count_prob)
+                                       flip_count_prob=args.flip_count_prob,
+                                       ending_n_mem_states=args.n_mem_states,
+                                       fix_and_add_bits=args.fix_and_add_bits
+                                       )
 
     info = {'logs': logs, 'args': args.__dict__}
     agents_dir = results_path.parent / 'agent'

@@ -14,9 +14,6 @@ def load_spec(name: str, **kwargs):
     """
     Loads a pre-defined POMDP specification, as well as policies.
     :param name:            The name of the function or .POMDP file defining the POMDP.
-    :param memory_id:       ID of memory function to use.
-    :param n_mem_states:    Number of memory states allowed.
-    :param mem_leakiness:   for memory_id="f" - how leaky do is out leaky identity function.
 
     The following **kwargs are specified for the following specs:
     tmaze_hyperparams:

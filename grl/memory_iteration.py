@@ -34,7 +34,10 @@ def run_memory_iteration(pomdp: POMDP,
                          pi_params: jnp.ndarray = None,
                          kitchen_sink_policies: int = 0,
                          epsilon: float = 0.1,
-                         flip_count_prob: bool = False):
+                         flip_count_prob: bool = False,
+                         ending_n_mem_states: int = None,
+                         fix_and_add_bits: bool = False
+                         ):
     """
     Wrapper function for the Memory Iteration algorithm.
     Memory iteration intersperses memory improvement and policy improvement.
@@ -51,6 +54,8 @@ def run_memory_iteration(pomdp: POMDP,
     :param lambda_0:            What's our first lambda parameter for lambda discrep?
     :param lambda_1:            What's our second lambda parameter for lambda discrep?
     :param alpha:               How uniform do we want our lambda discrep weighting?
+    :param ending_n_mem_states: How many memory states do we end with? We use this to iterate the num. of mem states
+    :param fix_and_add_bits:    Do we fix our memory states and add a bit? works with ending_n_mem_states
     """
     assert isinstance(pomdp, POMDP) and pomdp.current_state is None, \
         f"POMDP should be stateless and current_state should be None, got {pomdp.current_state} instead"
@@ -91,7 +96,10 @@ def run_memory_iteration(pomdp: POMDP,
                                    mi_per_step=mi_steps,
                                    init_pi_improvement=init_pi_improvement,
                                    kitchen_sink_policies=kitchen_sink_policies,
-                                   discrep_loss=discrep_loss_fn)
+                                   discrep_loss=discrep_loss_fn,
+                                   ending_n_mem_states=ending_n_mem_states,
+                                   fix_and_add_bits=fix_and_add_bits
+                                   )
 
     get_measures = partial(lambda_discrep_measures, discrep_loss_fn=discrep_loss_fn)
 
@@ -151,6 +159,8 @@ def memory_iteration(
     kitchen_sink_policies: int = 0,
     discrep_loss: Callable = None,
     log_every: int = 1000,
+    ending_n_mem_states: int = None,
+    fix_and_add_bits: bool = False
 ):
     """
     The memory iteration algorithm. This algorithm flips between improving
@@ -170,6 +180,8 @@ def memory_iteration(
     info = {'policy_improvement_outputs': [], 'mem_loss': []}
     td_v_vals, td_q_vals = td_pe(agent.policy, init_pomdp)
     info['initial_values'] = {'v': td_v_vals, 'q': td_q_vals}
+
+    start_n_mem_states = agent.mem_params.shape[-1]
 
     if agent.policy_optim_alg in ['discrep_max', 'discrep_min'] or not init_pi_improvement:
         initial_pi_params = agent.pi_params.copy()
