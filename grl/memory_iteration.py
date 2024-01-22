@@ -1,11 +1,12 @@
 import copy
-import numpy as np
+from functools import partial
+from typing import Callable
+
 import jax
 import jax.numpy as jnp
 from jax.nn import softmax
+import numpy as np
 from tqdm import trange
-from functools import partial
-from typing import Callable
 
 from grl.agent.analytical import AnalyticalAgent
 from grl.mdp import POMDP
@@ -65,12 +66,22 @@ def run_memory_iteration(pomdp: POMDP,
         pi_params = glorot_init((pomdp.observation_space.n, pomdp.action_space.n), scale=0.2)
     initial_policy = softmax(pi_params, axis=-1)
 
-    agent = AnalyticalAgent(pi_params,
-                            rand_key,
-                            optim_str=optimizer_str,
+    self.mem_optim = get_optimizer(optim_str, self.mi_lr)
+    self.mem_optim_state = self.mem_optim.init(self.mem_params)
+
+    if self.policy_optim_alg in ['policy_mem_grad', 'policy_mem_grad_unrolled']:
+        mem_probs, pi_probs = softmax(self.mem_params, -1), softmax(self.pi_params, -1)
+        aug_policy = construct_aug_policy(mem_probs, pi_probs)
+        self.pi_aug_params = reverse_softmax(aug_policy)
+
+    self.pi_optim = get_optimizer(optim_str, self.pi_lr)
+    pi_params_to_optimize = self.pi_params
+    if self.policy_optim_alg in ['policy_mem_grad', 'policy_mem_grad_unrolled']:
+        pi_params_to_optimize = self.pi_aug_params
+    self.pi_optim_state = self.pi_optim.init(pi_params_to_optimize)
+    agent = AnalyticalAgent(optim_str=optimizer_str,
                             pi_lr=pi_lr,
                             mi_lr=mi_lr,
-                            mem_params=mem_params,
                             policy_optim_alg=policy_optim_alg,
                             error_type=error_type,
                             value_type=value_type,

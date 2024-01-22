@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+from jax import random
 import numpy as np
 import scipy.optimize
 from scipy.special import logsumexp, softmax
@@ -16,8 +17,8 @@ def pformat_vals(vals):
 
     return pformat(vals)
 
-def glorot_init(shape: Sequence[int], scale: float = 0.5) -> jnp.ndarray:
-    return np.random.normal(size=shape) * scale
+def glorot_init(rand_key: random.PRNGKey, shape: Sequence[int], scale: float = 0.5) -> jnp.ndarray:
+    return random.normal(rand_key, shape=shape) * scale
 
 def normalize(arr: np.ndarray, axis=-1) -> np.ndarray:
     with np.errstate(invalid='ignore'):
