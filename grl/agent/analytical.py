@@ -8,7 +8,6 @@ import numpy as np
 import optax
 
 from grl.mdp import POMDP
-from grl.utils.augment_policy import construct_aug_policy
 from grl.utils.loss import policy_discrep_loss, pg_objective_func, \
     mem_pg_objective_func, unrolled_mem_pg_objective_func
 from grl.utils.loss import mem_discrep_loss, mem_bellman_loss, mem_tde_loss, obs_space_mem_discrep_loss
@@ -64,7 +63,6 @@ class AnalyticalAgent:
         :param flip_count_prob: For our memory loss, do we flip our count probabilities??
         """
         self.policy_optim_alg = policy_optim_alg
-        self.og_n_obs = self.pi_params.shape[0]
 
         self.epsilon = epsilon
 
@@ -130,24 +128,31 @@ class AnalyticalAgent:
         partial_mem_discrep_loss = partial(mem_loss_fn, **partial_kwargs)
         self.memory_objective_func = partial_mem_discrep_loss
 
-    @property
-    def policy(self) -> jnp.ndarray:
+    def policy(self, pi_params: jnp.ndarray) -> jnp.ndarray:
         # return the learnt policy
-        return softmax(self.pi_params, axis=-1)
+        return softmax(pi_params, axis=-1)
 
-    @property
-    def memory(self) -> jnp.ndarray:
-        return softmax(self.mem_params, axis=-1)
+    def memory(self, mem_params: jnp.ndarray) -> jnp.ndarray:
+        return softmax(mem_params, axis=-1)
 
-    def reset_pi_params(self, rand_key: random.PRNGKey, pi_shape: Sequence[int] = None):
-        if pi_shape is None:
-            pi_shape = self.pi_params.shape
+    def reset_pi_params(self, rand_key: random.PRNGKey, pi_shape: Sequence[int]):
         pi_params = glorot_init(rand_key, pi_shape)
         pi_optim_state = self.pi_optim.init(pi_params)
         return pi_params, pi_optim_state
 
+    def reset_mem_params(self, rand_key: random.PRNGKey, mem_shape: Sequence[int]):
+        mem_params = glorot_init(rand_key, mem_shape)
+        mem_optim_state = self.mem_optim.init(mem_params)
+        return mem_params, mem_optim_state
+
     def policy_gradient_update(self, params: jnp.ndarray, optim_state: jnp.ndarray, pomdp: POMDP):
-        outs, params_grad = value_and_grad(self.pg_objective_func, has_aux=True)(params, pomdp)
+        pg_func = pg_objective_func
+        if self.policy_optim_alg == 'policy_mem_grad':
+            pg_func = mem_pg_objective_func
+        elif self.policy_optim_alg == 'policy_mem_grad_unrolled':
+            pg_func = unrolled_mem_pg_objective_func
+
+        outs, params_grad = value_and_grad(pg_func, has_aux=True)(params, pomdp)
         v_0, (td_v_vals, td_q_vals) = outs
 
         # We add a negative here to params_grad b/c we're trying to
@@ -186,7 +191,7 @@ class AnalyticalAgent:
                 'prev_td_v_vals': prev_td_v_vals
             }
         elif self.policy_optim_alg == 'policy_iter':
-            new_pi_params, prev_td_v_vals, prev_td_q_vals = self.policy_iteration_update(
+            new_pi_params, prev_td_v_vals, prev_td_q_vals = policy_iteration_step(
                 pi_params, pomdp, eps=self.epsilon)
             output = {'prev_td_q_vals': prev_td_q_vals, 'prev_td_v_vals': prev_td_v_vals}
         elif self.policy_optim_alg == 'discrep_max' or self.policy_optim_alg == 'discrep_min':

@@ -17,7 +17,7 @@ def pformat_vals(vals):
 
     return pformat(vals)
 
-def glorot_init(rand_key: random.PRNGKey, shape: Sequence[int], scale: float = 0.5) -> jnp.ndarray:
+def glorot_init(rand_key: random.PRNGKey, shape: Sequence[int], scale: float = 0.2) -> jnp.ndarray:
     return random.normal(rand_key, shape=shape) * scale
 
 def normalize(arr: np.ndarray, axis=-1) -> np.ndarray:

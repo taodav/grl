@@ -1,9 +1,11 @@
 import copy
+from collections import namedtuple
 from functools import partial
 from typing import Callable
 
 import jax
 import jax.numpy as jnp
+from jax import random
 from jax.nn import softmax
 import numpy as np
 from tqdm import trange
@@ -11,33 +13,27 @@ from tqdm import trange
 from grl.agent.analytical import AnalyticalAgent
 from grl.mdp import POMDP
 from grl.memory import memory_cross_product
-from grl.utils.augment_policy import deconstruct_aug_policy
-from grl.utils.math import glorot_init, greedify, reverse_softmax
+from grl.utils.augment_policy import deconstruct_aug_policy, construct_aug_policy
+from grl.utils.math import greedify, reverse_softmax
 from grl.utils.lambda_discrep import lambda_discrep_measures
 from grl.utils.loss import discrep_loss, pg_objective_func
 from grl.vi import td_pe
 
-def run_memory_iteration(pomdp: POMDP,
+MemoryIterationParams = namedtuple('MemoryIterationParams', [''])
+
+def run_memory_iteration(agent: AnalyticalAgent,
+                         pomdp: POMDP,
                          mem_params: jnp.ndarray,
+                         rand_key: jax.random.PRNGKey,
                          policy_optim_alg: str = 'policy_iter',
-                         optimizer_str: str = 'sgd',
-                         pi_lr: float = 1.,
-                         mi_lr: float = 1.,
                          mi_iterations: int = 1,
                          mi_steps: int = 50000,
                          pi_steps: int = 50000,
-                         rand_key: jax.random.PRNGKey = None,
                          error_type: str = 'l2',
                          value_type: str = 'q',
-                         objective: str = 'discrep',
-                         residual: bool = False,
-                         lambda_0: float = 0.,
-                         lambda_1: float = 1.,
                          alpha: float = 1.,
                          pi_params: jnp.ndarray = None,
-                         kitchen_sink_policies: int = 0,
-                         epsilon: float = 0.1,
-                         flip_count_prob: bool = False):
+                         kitchen_sink_policies: int = 0):
     """
     Wrapper function for the Memory Iteration algorithm.
     Memory iteration intersperses memory improvement and policy improvement.
@@ -63,35 +59,21 @@ def run_memory_iteration(pomdp: POMDP,
     init_pi_improvement = False
     if pi_params is None:
         init_pi_improvement = True
-        pi_params = glorot_init((pomdp.observation_space.n, pomdp.action_space.n), scale=0.2)
+        pi_shape = (pomdp.observation_space.n, pomdp.action_space.n)
+        pi_key, rand_key = random.split(rand_key)
+        pi_params, pi_tx_params = agent.reset_pi_params(pi_key, pi_shape)
+
     initial_policy = softmax(pi_params, axis=-1)
 
-    self.mem_optim = get_optimizer(optim_str, self.mi_lr)
-    self.mem_optim_state = self.mem_optim.init(self.mem_params)
-
-    if self.policy_optim_alg in ['policy_mem_grad', 'policy_mem_grad_unrolled']:
-        mem_probs, pi_probs = softmax(self.mem_params, -1), softmax(self.pi_params, -1)
+    if policy_optim_alg in ['policy_mem_grad', 'policy_mem_grad_unrolled']:
+        mem_probs, pi_probs = softmax(mem_params, axis=-1), softmax(pi_params, axis=-1)
         aug_policy = construct_aug_policy(mem_probs, pi_probs)
-        self.pi_aug_params = reverse_softmax(aug_policy)
-
-    self.pi_optim = get_optimizer(optim_str, self.pi_lr)
-    pi_params_to_optimize = self.pi_params
-    if self.policy_optim_alg in ['policy_mem_grad', 'policy_mem_grad_unrolled']:
-        pi_params_to_optimize = self.pi_aug_params
-    self.pi_optim_state = self.pi_optim.init(pi_params_to_optimize)
-    agent = AnalyticalAgent(optim_str=optimizer_str,
-                            pi_lr=pi_lr,
-                            mi_lr=mi_lr,
-                            policy_optim_alg=policy_optim_alg,
-                            error_type=error_type,
-                            value_type=value_type,
-                            objective=objective,
-                            residual=residual,
-                            lambda_0=lambda_0,
-                            lambda_1=lambda_1,
-                            alpha=alpha,
-                            epsilon=epsilon,
-                            flip_count_prob=flip_count_prob)
+        pi_params = reverse_softmax(aug_policy)
+        pi_key, rand_key = random.split(rand_key)
+        _, pi_tx_params = agent.reset_pi_params(pi_key, pi_params.shape)
+    else:
+        mem_tx_key, rand_key = random.split(rand_key)
+        _, mem_tx_params = agent.reset_mem_params(mem_tx_key, mem_params.shape)
 
     discrep_loss_fn = partial(discrep_loss,
                               value_type=value_type,

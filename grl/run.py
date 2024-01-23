@@ -7,6 +7,7 @@ import numpy as np
 import jax
 from jax.config import config
 
+from grl.agent.analytical import AnalyticalAgent
 from grl.environment import load_pomdp
 from grl.environment.policy_lib import get_start_pi
 from grl.utils.file_system import results_path, numpyify_and_save
@@ -154,27 +155,34 @@ if __name__ == '__main__':
 
     results_path = results_path(args)
 
-    logs, agent = run_memory_iteration(pomdp,
+    agent = AnalyticalAgent(optim_str=args.optimizer,
+                            pi_lr=args.lr,
+                            mi_lr=args.lr,
+                            policy_optim_alg=args.policy_optim_alg,
+                            error_type=args.error_type,
+                            value_type=args.value_type,
+                            objective=args.objective,
+                            residual=args.residual,
+                            lambda_0=args.lambda_0,
+                            lambda_1=args.lambda_1,
+                            alpha=args.alpha,
+                            epsilon=args.epsilon,
+                            flip_count_prob=args.flip_count_prob)
+
+    logs, agent = run_memory_iteration(agent,
+                                       pomdp,
                                        mem_params,
-                                       rand_key=rand_key,
+                                       rand_key,
                                        mi_iterations=args.mi_iterations,
                                        policy_optim_alg=args.policy_optim_alg,
-                                       optimizer_str=args.optimizer,
-                                       pi_lr=args.lr,
-                                       mi_lr=args.lr,
                                        mi_steps=args.mi_steps,
                                        pi_steps=args.pi_steps,
                                        value_type=args.value_type,
                                        error_type=args.error_type,
-                                       objective=args.objective,
-                                       residual=args.residual,
-                                       lambda_0=args.lambda_0,
-                                       lambda_1=args.lambda_1,
                                        alpha=args.alpha,
-                                       epsilon=args.epsilon,
                                        pi_params=pi_params,
-                                       kitchen_sink_policies=args.kitchen_sink_policies,
-                                       flip_count_prob=args.flip_count_prob)
+                                       kitchen_sink_policies=args.kitchen_sink_policies
+                                       )
 
     info = {'logs': logs, 'args': args.__dict__}
     agents_dir = results_path.parent / 'agent'
