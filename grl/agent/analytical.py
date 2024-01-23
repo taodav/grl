@@ -145,7 +145,7 @@ class AnalyticalAgent:
         mem_optim_state = self.mem_optim.init(mem_params)
         return mem_params, mem_optim_state
 
-    def policy_gradient_update(self, params: jnp.ndarray, optim_state: jnp.ndarray, pomdp: POMDP):
+    def policy_gradient_update(self, params: jnp.ndarray, tx_params: jnp.ndarray, pomdp: POMDP):
         pg_func = pg_objective_func
         if self.policy_optim_alg == 'policy_mem_grad':
             pg_func = mem_pg_objective_func
@@ -158,13 +158,19 @@ class AnalyticalAgent:
         # We add a negative here to params_grad b/c we're trying to
         # maximize the PG objective (value of start state).
         params_grad = -params_grad
-        updates, optimizer_state = self.pi_optim.update(params_grad, optim_state, params)
+        updates, tx_params = self.pi_optim.update(params_grad, tx_params, params)
         params = optax.apply_updates(params, updates)
-        return v_0, td_v_vals, td_q_vals, params
+
+        output = {
+            'v_0': v_0,
+            'prev_td_q_vals': td_q_vals,
+            'prev_td_v_vals': td_v_vals
+        }
+        return params, tx_params, output
 
     def policy_discrep_update(self,
                               params: jnp.ndarray,
-                              optim_state: jnp.ndarray,
+                              tx_params: jnp.ndarray,
                               pomdp: POMDP,
                               sign: bool = True):
         outs, params_grad = value_and_grad(self.policy_discrep_objective_func,
@@ -174,33 +180,33 @@ class AnalyticalAgent:
         # it's the flip of sign b/c the optimizer already applies the negative sign
         params_grad *= (1 - float(sign))
 
-        updates, optimizer_state = self.pi_optim.update(params_grad, optim_state, params)
+        updates, tx_params = self.pi_optim.update(params_grad, tx_params, params)
         params = optax.apply_updates(params, updates)
 
-        return loss, mc_vals, td_vals, params, optimizer_state
+        output = {'loss': loss, 'mc_vals': mc_vals, 'td_vals': td_vals}
+
+        return params, tx_params, output
+    def policy_iteration_update(self, pi_params: dict,
+                                pomdp: POMDP):
+        new_pi_params, prev_td_v_vals, prev_td_q_vals = policy_iteration_step(
+            pi_params, pomdp, eps=self.epsilon)
+        output = {'prev_td_q_vals': prev_td_q_vals, 'prev_td_v_vals': prev_td_v_vals}
+        return pi_params, output
 
     def policy_improvement(self, pi_params: dict,
                            pi_tx_params: optax.Params,
                            pomdp: POMDP):
         if self.policy_optim_alg in ['policy_grad', 'policy_mem_grad', 'policy_mem_grad_unrolled']:
-            v_0, prev_td_v_vals, prev_td_q_vals, new_pi_params = \
+            pi_params, pi_tx_params, output = \
                 self.policy_gradient_update(pi_params, pi_tx_params, pomdp)
-            output = {
-                'v_0': v_0,
-                'prev_td_q_vals': prev_td_q_vals,
-                'prev_td_v_vals': prev_td_v_vals
-            }
         elif self.policy_optim_alg == 'policy_iter':
-            new_pi_params, prev_td_v_vals, prev_td_q_vals = policy_iteration_step(
-                pi_params, pomdp, eps=self.epsilon)
-            output = {'prev_td_q_vals': prev_td_q_vals, 'prev_td_v_vals': prev_td_v_vals}
+            pi_params, output = self.policy_iteration_update(pi_params, pomdp)
         elif self.policy_optim_alg == 'discrep_max' or self.policy_optim_alg == 'discrep_min':
-            loss, mc_vals, td_vals, new_pi_params, new_pi_tx_params = self.policy_discrep_update(
+            pi_params, pi_tx_params, output = self.policy_discrep_update(
                 pi_params,
                 pi_tx_params,
                 pomdp,
                 sign=(self.policy_optim_alg == 'discrep_max'))
-            output = {'loss': loss, 'mc_vals': mc_vals, 'td_vals': td_vals}
         else:
             raise NotImplementedError
         return pi_params, pi_tx_params, output

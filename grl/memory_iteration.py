@@ -19,7 +19,11 @@ from grl.utils.lambda_discrep import lambda_discrep_measures
 from grl.utils.loss import discrep_loss, pg_objective_func
 from grl.vi import td_pe
 
-MemoryIterationParams = namedtuple('MemoryIterationParams', [''])
+MemoryIterationParams = namedtuple('MemoryIterationParams',
+                                   [
+                                       'mem_params', 'mem_tx_params',
+                                       'pi_params', 'pi_tx_params',
+                                    ])
 
 def run_memory_iteration(agent: AnalyticalAgent,
                          pomdp: POMDP,
@@ -74,6 +78,9 @@ def run_memory_iteration(agent: AnalyticalAgent,
     else:
         mem_tx_key, rand_key = random.split(rand_key)
         _, mem_tx_params = agent.reset_mem_params(mem_tx_key, mem_params.shape)
+
+    mem_it_params = MemoryIterationParams(mem_params=mem_params, mem_tx_params=mem_tx_params,
+                                          )
 
     discrep_loss_fn = partial(discrep_loss,
                               value_type=value_type,
@@ -169,6 +176,9 @@ def memory_iteration(
 
     if agent.policy_optim_alg in ['discrep_max', 'discrep_min'] or \
             (not init_pi_improvement and agent.policy_optim_alg not in ['policy_grad', 'policy_mem_grad']):
+
+        jax.lax.scan(agent.)
+
         initial_pi_params = agent.pi_params.copy()
 
         og_policy_optim_algo = agent.policy_optim_alg
