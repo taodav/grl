@@ -25,5 +25,6 @@ hparams = {
         'n_mem_states': 2,
         'mi_iterations': 1,
         'seed': [2020 + i for i in range(5)],
+        'platform': 'gpu'
     }]
 }
