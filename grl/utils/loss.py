@@ -617,3 +617,26 @@ def next_step_mstd_err(
     # Sum over all dimensions
     loss = weighted_sq_tde_soasoa.sum()
     return loss, vals, vals
+
+def mem_next_tde_loss(
+        mem_params: jnp.ndarray,
+        pi: jnp.ndarray,
+        pomdp: POMDP, # input non-static arrays
+        value_type: str = 'q',
+        error_type: str = 'l2',
+        lambda_0: float = 0,
+        lambda_1: float = 1.,  # NOT CURRENTLY USED!
+        residual: bool = False,
+        alpha: float = 1.,
+        flip_count_prob: bool = False):
+    mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
+    loss, _, _ = next_step_mstd_err(pi,
+                                    mem_aug_pomdp,
+                                    # value_type,
+                                    error_type,
+                                    # alpha,
+                                    lambda_=lambda_0,
+                                    residual=residual,
+                                    # flip_count_prob=flip_count_prob
+                                    )
+    return loss

@@ -11,7 +11,13 @@ from grl.mdp import POMDP
 from grl.utils.policy import construct_aug_policy
 from grl.utils.loss import policy_discrep_loss, pg_objective_func, \
     mem_pg_objective_func, unrolled_mem_pg_objective_func
-from grl.utils.loss import mem_discrep_loss, mem_bellman_loss, mem_tde_loss, obs_space_mem_discrep_loss
+from grl.utils.loss import (
+    mem_discrep_loss,
+    mem_bellman_loss,
+    mem_tde_loss,
+    mem_next_tde_loss,
+    obs_space_mem_discrep_loss
+)
 from grl.utils.math import glorot_init, reverse_softmax
 from grl.utils.optimizer import get_optimizer
 from grl.vi import policy_iteration_step
@@ -159,6 +165,9 @@ class AnalyticalAgent:
                 partial_kwargs['residual'] = self.residual
             elif self.objective == 'tde':
                 mem_loss_fn = mem_tde_loss
+                partial_kwargs['residual'] = self.residual
+            elif self.objective == 'next_tde':
+                mem_loss_fn = mem_next_tde_loss
                 partial_kwargs['residual'] = self.residual
             elif self.objective == 'obs_space':
                 mem_loss_fn = obs_space_mem_discrep_loss

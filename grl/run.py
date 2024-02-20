@@ -73,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--error_type', default='l2', type=str,
                         help='Do we use (l2 | abs) for our discrepancies?')
     parser.add_argument('--objective', default='discrep', type=str,
-                        help='What objective are we trying to optimize? (discrep | bellman | tde | obs_space)')
+                        help='What objective are we trying to optimize? (discrep | bellman | tde | next_tde | obs_space)')
     parser.add_argument('--residual', action='store_true',
                         help='For Bellman and TD errors, do we add the residual term?')
     parser.add_argument('--lr', default=1, type=float)
