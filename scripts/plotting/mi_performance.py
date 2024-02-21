@@ -27,13 +27,13 @@ from definitions import ROOT_DIR
 # ]
 
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'batch_run_pg'),
+    Path(ROOT_DIR, 'results', 'mem_next_tde_pg'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
 pomdp_files_dir = Path(ROOT_DIR, 'grl', 'environment', 'pomdp_files')
 
-args_to_keep = ['spec', 'n_mem_states', 'seed', 'alpha', 'residual', 'objective']
+args_to_keep = ['spec', 'n_mem_states', 'seed', 'alpha', 'residual', 'objective', 'lambda_0']
 split_by = [arg for arg in args_to_keep if arg != 'seed'] + ['experiment']
 
 # this option allows us to compare to either the optimal belief state soln
@@ -46,10 +46,18 @@ spec_plot_order = [
     'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up'
 ]
 
-# plot_key = 'final_memoryless_optimal_perf'  # for batch_run
-plot_key = 'final_rand_avg_perf'  # for batch_run
 
-# plot_key = 'final_mem_perf'  # for single runs
+exp_to_title = {
+    'batch_run_pg_ld': 'LD',
+    'batch_run_pg_mstde': 'MSTDE',
+    'mem_tde_01_pg_lambda_0': 'MSTDE',
+    'mem_tde_01_pg_lambda_1': 'MC w/ 1-step Bellman Op.',
+}
+
+plot_key_to_init_pi = {
+    'final_rand_avg_perf': 'Random policies (avg)',
+    'final_memoryless_optimal_perf': 'Optimal memoryless policy'
+}
 
 # %% codecell
 
@@ -60,16 +68,20 @@ compare_to_dict = parse_baselines(spec_plot_order,
 
 
 # %% codecell
-# all_res_df = parse_dirs(experiment_dirs,
-#                         compare_to_dict,
-#                         args_to_keep)
-all_res_df = parse_batch_dirs(experiment_dirs,
-                              compare_to_dict,
-                              args_to_keep)
-
+all_res_df = parse_dirs(experiment_dirs,
+                        compare_to_dict,
+                        args_to_keep)
+# all_res_df = parse_batch_dirs(experiment_dirs,
+#                               compare_to_dict,
+#                               args_to_keep)
 
 
 # %% codecell
+
+# plot_key = 'final_memoryless_optimal_perf'  # for batch_run
+# plot_key = 'final_rand_avg_perf'  # for batch_run
+
+plot_key = 'final_mem_perf'  # for single runs
 
 # FILTER OUT for what we want to plot
 # alpha = 1.
@@ -77,6 +89,17 @@ all_res_df = parse_batch_dirs(experiment_dirs,
 # all_res_df
 residual = False
 filtered_df = all_res_df[(all_res_df['residual'] == residual)].reset_index()
+
+# Here we create/update experiment tags
+filtered_df['experiment'] = filtered_df['experiment'] + '_' + filtered_df['objective']
+
+# %% codecell
+
+filtered_df['experiment'].unique()
+exp_to_title['mem_next_tde_pg_discrep'] = 'LD'
+exp_to_title['mem_next_tde_pg_next_tde'] = 'Next MSTDE'
+exp_to_title['mem_next_tde_pg_tde'] = 'MSTDE'
+
 
 # %% codecell
 all_res_groups = filtered_df.groupby(split_by, as_index=False)
@@ -97,8 +120,15 @@ normalized_df[plot_key] = (normalized_df[plot_key] - merged_df['init_policy_perf
 del normalized_df['init_policy_perf']
 del normalized_df['compare_to_perf']
 
+# REFACTOR THIS
+# lambda_0_dfs = normalized_df[normalized_df['lambda_0'] == 0]
+# normalized_df.loc[normalized_df['lambda_0'] == 0, 'experiment'] = lambda_0_dfs['experiment'] + '_lambda_0'
+#
+# lambda_1_dfs = normalized_df[normalized_df['lambda_0'] == 1]
+# normalized_df.loc[normalized_df['lambda_0'] == 1, 'experiment'] = lambda_1_dfs['experiment'] + '_lambda_1'
+
+
 # %% codecell
-normalized_df.loc[(normalized_df['spec'] == 'hallway') & (normalized_df['n_mem_states'] == 8), plot_key] = 0
 
 # %% codecell
 # normalized_df[normalized_df['spec'] == 'prisoners_dilemma_all_c']
@@ -143,8 +173,10 @@ for spec in spec_plot_order:
     sorted_std_err_df = pd.concat([sorted_std_err_df, std_err_spec_df])
 
 # %%
-experiments = normalized_df['experiment'].unique()
+experiments = sorted(normalized_df['experiment'].unique())
 objectives = normalized_df['objective'].unique()
+lambda_0 = normalized_df['lambda_0'].unique()
+
 
 
 group_width = 1
@@ -163,12 +195,12 @@ x = np.arange(len(specs))
 
 init_improvement_perf_mean = np.array(all_means[
                                         (all_means['n_mem_states'] == num_n_mem[0]) &
-                                        (all_means['experiment'] == experiments[0]) &
+                                        # (all_means['experiment'] == experiments[0]) &
                                         (all_means['objective'] == objectives[0])
                                         ]['init_improvement_perf'])
 init_improvement_perf_std = np.array(all_std_errs[
                                         (all_std_errs['n_mem_states'] == num_n_mem[0]) &
-                                        (all_std_errs['experiment'] == experiments[0]) &
+                                        # (all_std_errs['experiment'] == experiments[0]) &
                                         (all_std_errs['objective'] == objectives[0])
                                         ]['init_improvement_perf'])
 
@@ -211,11 +243,15 @@ ax.set_xticklabels(xlabels)
 # ax.set_title(f"Memory Iteration ({policy_optim_alg})")
 # alpha_str = 'uniform' if alpha == 1. else 'occupancy'
 residual_str = 'semi_grad' if not residual else 'residual'
-title_str = " vs. ".join([f"{exp} ({hatch})" for exp, hatch in zip(experiments, exp_hatches)]) + f"\n residual: {residual_str}, init_policy: {plot_key}"
+title_str = " vs. ".join([f"{exp_to_title[exp]} ({hatch})"
+    for exp, hatch in zip(experiments, exp_hatches)]) + \
+    f"\n {residual_str}, "
+    # f"init_policy: {plot_key_to_init_pi[plot_key]}"
 # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
 ax.set_title(title_str)
 
 downloads = Path().home() / 'Downloads'
+fig_name = '_'.join(experiments) + f"{plot_key}.pdf"
+fig_path = downloads / fig_name
 # fig_path = downloads / f"{results_dir.stem}_{residual_str}_{alpha_str}.pdf"
-# fig.savefig(fig_path, bbox_inches='tight')
-# %% codecell
+fig.savefig(fig_path, bbox_inches='tight')
