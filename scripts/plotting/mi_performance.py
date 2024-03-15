@@ -26,8 +26,11 @@ from definitions import ROOT_DIR
 #     Path(ROOT_DIR, 'results', 'final_discrep_kitchen_sinks_pg'),
 # ]
 
+# experiment_dirs = [
+#     Path(ROOT_DIR, 'results', 'discrep_interleave_pg'),
+# ]
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'discrep_interleave_pg'),
+    Path(ROOT_DIR, 'results', 'batch_run_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -77,9 +80,12 @@ all_res_df = parse_batch_dirs(experiment_dirs,
 # all_res_df
 residual = False
 alpha = 1.
+init_pi = 'mstde'  # ld, mstde, td_memoryless
 filtered_df = all_res_df[
 (all_res_df['residual'] == residual) &
-(all_res_df['alpha'] == alpha)
+(all_res_df['alpha'] == alpha) &
+(all_res_df['init_pi'] == init_pi) &
+(all_res_df['n_mem_states'] != 8)
 ].reset_index()
 
 
@@ -219,7 +225,7 @@ ax.set_xticklabels(xlabels)
 # ax.set_title(f"Memory Iteration ({policy_optim_alg})")
 # alpha_str = 'uniform' if alpha == 1. else 'occupancy'
 residual_str = 'semi_grad' if not residual else 'residual'
-title_str = " vs. ".join([f"{exp} ({hatch})" for exp, hatch in zip(experiments, exp_hatches)]) + f"\n residual: {residual_str}, init_policy: {plot_key}"
+title_str = " vs. ".join([f"{exp} ({hatch})" for exp, hatch in zip(experiments, exp_hatches)]) + f"\n residual: {residual_str}, init_policy: {init_pi}"
 # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
 ax.set_title(title_str)
 

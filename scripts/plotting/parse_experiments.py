@@ -35,23 +35,24 @@ def parse_batch_dirs(exp_dirs: list[Path],
 
             beginning = logs['beginning']
             aim_measures = beginning['measures']
-            # init_policy_perf_seeds = (aim_measures['values']['state_vals']['v'] * aim_measures['values']['p0'])
-            # init_policy_perf_seeds = init_policy_perf_seeds.sum(axis=-1).mean(axis=-1)
-            init_policy_perf_seeds = np.einsum('ij,ij->i',
-                                               aim_measures['values']['state_vals']['v'],
-                                               aim_measures['values']['p0'])
+            init_policy_perf_seeds = (aim_measures['values']['state_vals']['v'] * aim_measures['values']['p0'])
+            init_policy_perf_seeds = init_policy_perf_seeds.sum(axis=-1).mean(axis=-1)
+            # init_policy_perf_seeds = np.einsum('ij,ij->i',
+            #                                    aim_measures['values']['state_vals']['v'],
+            #                                    aim_measures['values']['p0'])
 
             after_pi_op = logs['after_pi_op']
-            apo_measures = after_pi_op['measures']
+            apo_measures = after_pi_op['initial_improvement_measures']
             init_improvement_perf_seeds = np.einsum('ij,ij->i',
                                                     apo_measures['values']['state_vals']['v'],
                                                     apo_measures['values']['p0'])
             compare_to_perf = baseline_dict[args['spec']]
 
-            if isinstance(args['objective'], str):
-                keys = [args['objective']]
-            else:
-                keys = args['objective']
+            # if isinstance(args['objective'], str):
+            #     keys = [args['objective']]
+            # else:
+            #     keys = args['objective']
+            keys = logs['final'].keys()
 
             for key in keys:
                 objective, residual = key, False
@@ -61,25 +62,30 @@ def parse_batch_dirs(exp_dirs: list[Path],
                 args['residual'] = residual
                 args['objective'] = objective
 
-                single_res = {k: args[k] for k in args_to_keep}
-                single_res['experiment'] = exp_dir.name + f'_{objective}'
-                single_res['objective'] = objective
+                for i, init_pi_obj in enumerate(['ld', 'mstde', 'td_memoryless']):
+                    single_res = {k: args[k] for k in args_to_keep}
+                    single_res['init_pi'] = init_pi_obj
+                    single_res['experiment'] = exp_dir.name + f'_{objective}'
+                    single_res['objective'] = objective
 
-                final = logs['final']
-                final_measures = final['measures']
-                final_mem_perf = np.einsum('ij,ij->i',
-                                           final_measures['values']['state_vals']['v'],
-                                           final_measures['values']['p0'])
+                    final = logs['final'][key]
+                    final_measures = final['measures']
 
-                for i in range(args['n_seeds']):
-                    all_results.append({
-                        **single_res,
-                        'seed': i,
-                        'init_policy_perf': init_policy_perf_seeds[i],
-                        'init_improvement_perf': init_improvement_perf_seeds[i],
-                        'final_mem_perf': final_mem_perf[i],
-                        'compare_to_perf': compare_to_perf,
-                    })
+                    final_mem_perf = (final_measures['values']['state_vals']['v'] * final_measures['values']['p0'])
+                    final_mem_perf = final_mem_perf.sum(axis=-1)[:, i]
+                    # final_mem_perf = np.einsum('ij,ij->i',
+                    #                            final_measures['values']['state_vals']['v'],
+                    #                            final_measures['values']['p0'])
+
+                    for i in range(args['n_seeds']):
+                        all_results.append({
+                            **single_res,
+                            'seed': i,
+                            'init_policy_perf': init_policy_perf_seeds[i],
+                            'init_improvement_perf': init_improvement_perf_seeds[i],
+                            'final_mem_perf': final_mem_perf[i],
+                            'compare_to_perf': compare_to_perf,
+                        })
 
     for exp_dir in exp_dirs:
         parse_exp_dir(exp_dir)
@@ -195,7 +201,7 @@ if __name__ == "__main__":
 
     compare_to = 'belief'
 
-    directory = Path(ROOT_DIR, 'results', "discrep_interleave_pg")
+    directory = Path(ROOT_DIR, 'results', "batch_run_kitchen")
     # directory = Path(ROOT_DIR, 'results', "final_discrep_kitchen_sinks_pg")
 
     vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
