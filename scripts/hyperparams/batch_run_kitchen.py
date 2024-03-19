@@ -8,8 +8,9 @@ hparams = {
     'entry': '-m scripts.batch_run_kitchen_sinks',
     'args': [{
         'spec': [
-            'tiger-alt-start', 'tmaze_5_two_thirds_up', '4x3.95',
-            'cheese.95', 'network', 'shuttle.95', 'paint.95'
+            'cheese.95', 'tmaze_5_two_thirds_up'
+            # 'tiger-alt-start', 'tmaze_5_two_thirds_up', '4x3.95',
+            # 'cheese.95', 'network', 'shuttle.95', 'paint.95'
             # 'hallway'
             # 'bridge-repair',
         ],
@@ -21,7 +22,8 @@ hparams = {
         'pi_steps': 10000,
         'optimizer': 'adam',
         'lr': 0.01,
-        'n_mem_states': [2, 4, 8],
+        # 'n_mem_states': [2, 4, 8],
+        'n_mem_states': 8,
         'mi_iterations': 1,
         'random_policies': 100,
         'n_seeds': 10,
