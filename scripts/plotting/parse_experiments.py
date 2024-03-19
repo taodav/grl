@@ -78,9 +78,9 @@ def parse_batch_dirs(exp_dirs: list[Path],
                     #                            final_measures['values']['p0'])
 
                     for i in range(args['n_seeds']):
+                        single_res['seed'] = int(str(single_res['seed']) + str(i))
                         all_results.append({
                             **single_res,
-                            'seed': i,
                             'init_policy_perf': init_policy_perf_seeds[i],
                             'init_improvement_perf': init_improvement_perf_seeds[i],
                             'final_mem_perf': final_mem_perf[i],
