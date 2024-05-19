@@ -20,6 +20,7 @@ plt.rcParams.update({'font.size': 18})
 from scripts.plotting.parse_experiments import parse_baselines, parse_dirs, parse_batch_dirs
 from definitions import ROOT_DIR
 
+
 # %% codecell
 # experiment_dirs = [
 #     Path(ROOT_DIR, 'results', 'mem_tde_kitchen_sinks_pg'),
@@ -27,7 +28,7 @@ from definitions import ROOT_DIR
 # ]
 
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'discrep_interleave_pg'),
+    Path(ROOT_DIR, 'results', 'batch_run_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -223,6 +224,7 @@ title_str = " vs. ".join([f"{exp} ({hatch})" for exp, hatch in zip(experiments, 
 # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
 ax.set_title(title_str)
 
+plt.show()
 downloads = Path().home() / 'Downloads'
 # fig_path = downloads / f"{results_dir.stem}_{residual_str}_{alpha_str}.pdf"
 # fig.savefig(fig_path, bbox_inches='tight')

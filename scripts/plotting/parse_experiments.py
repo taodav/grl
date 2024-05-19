@@ -12,6 +12,13 @@ from grl.utils.math import greedify
 
 from definitions import ROOT_DIR
 
+
+kitchen_obj_map = {
+    'tde': 'mstde',
+    'tde_residual': 'mstde_res',
+    'discrep': 'ld'
+}
+
 def parse_batch_dirs(exp_dirs: list[Path],
                      baseline_dict: dict,
                      args_to_keep: list[str]):
@@ -35,25 +42,34 @@ def parse_batch_dirs(exp_dirs: list[Path],
 
             beginning = logs['beginning']
             aim_measures = beginning['measures']
-            # init_policy_perf_seeds = (aim_measures['values']['state_vals']['v'] * aim_measures['values']['p0'])
-            # init_policy_perf_seeds = init_policy_perf_seeds.sum(axis=-1).mean(axis=-1)
-            init_policy_perf_seeds = np.einsum('ij,ij->i',
-                                               aim_measures['values']['state_vals']['v'],
-                                               aim_measures['values']['p0'])
+            if 'kitchen' in exp_dir.stem:
+                # if we're doing kitchen sinks policies, we need to take the mean over
+                # initial policies
+                init_policy_perf_seeds = (aim_measures['values']['state_vals']['v'] * aim_measures['values']['p0'])
+                init_policy_perf_seeds = init_policy_perf_seeds.sum(axis=-1).mean(axis=-1)
+            else:
+                init_policy_perf_seeds = np.einsum('ij,ij->i',
+                                                   aim_measures['values']['state_vals']['v'],
+                                                   aim_measures['values']['p0'])
 
             after_pi_op = logs['after_pi_op']
-            apo_measures = after_pi_op['measures']
+            if 'measures' not in after_pi_op:
+                assert 'initial_improvement_measures' in after_pi_op
+                apo_measures = after_pi_op['initial_improvement_measures']
+            else:
+                apo_measures = after_pi_op['measures']
             init_improvement_perf_seeds = np.einsum('ij,ij->i',
                                                     apo_measures['values']['state_vals']['v'],
                                                     apo_measures['values']['p0'])
             compare_to_perf = baseline_dict[args['spec']]
 
-            if isinstance(args['objective'], str):
-                keys = [args['objective']]
+            if isinstance(args['objectives'], str):
+                keys = [args['objectives']]
             else:
-                keys = args['objective']
+                keys = args['objectives']
 
-            for key in keys:
+            for i, key in enumerate(keys):
+                key = kitchen_obj_map.get(key, key)
                 objective, residual = key, False
                 if key == 'mstde_res':
                     objective, residual = 'mstde', True
@@ -66,10 +82,17 @@ def parse_batch_dirs(exp_dirs: list[Path],
                 single_res['objective'] = objective
 
                 final = logs['final']
-                final_measures = final['measures']
-                final_mem_perf = np.einsum('ij,ij->i',
-                                           final_measures['values']['state_vals']['v'],
-                                           final_measures['values']['p0'])
+                final_measures = final[key]['measures']
+                if 'kitchen' in exp_dir.stem:
+                    # For now, we assume kitchen selection objective == mem learning objective
+                    final_mem_perf = np.einsum('ij,ij->i',
+                                               final_measures['values']['state_vals']['v'][:, i],
+                                               final_measures['values']['p0'][:, i])
+
+                else:
+                    final_mem_perf = np.einsum('ij,ij->i',
+                                               final_measures['values']['state_vals']['v'],
+                                               final_measures['values']['p0'])
 
                 for i in range(args['n_seeds']):
                     all_results.append({

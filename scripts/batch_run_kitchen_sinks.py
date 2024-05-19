@@ -76,6 +76,8 @@ def get_args():
 
     parser.add_argument('--random_policies', default=100, type=int,
                         help='How many random policies do we use for random kitchen sinks??')
+    parser.add_argument('--leave_out_optimal', action='store_true',
+                        help="Do we include the optimal policy when we select the initial policy")
     parser.add_argument('--n_mem_states', default=2, type=int,
                         help='for memory_id = 0, how many memory states do we have?')
 
@@ -182,8 +184,12 @@ def make_experiment(args):
         print("Learnt initial improvement policy:\n{}", nn.softmax(memoryless_optimal_pi_params, axis=-1))
 
         pis_with_memoryless_optimal = pi_paramses.at[-1].set(memoryless_optimal_pi_params)
+
         after_pi_op_info['all_tested_pi_params'] = pis_with_memoryless_optimal
         info['after_pi_op'] = after_pi_op_info
+
+        if args.leave_out_optimal:
+            pis_with_memoryless_optimal = pi_paramses[:-1]
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
@@ -277,7 +283,6 @@ def make_experiment(args):
         after_mem_op_info['mstde_res'] = mstde_res_mem_info
 
         info['after_mem_op'] = after_mem_op_info
-
 
         def cross_and_improve_pi(mem_params: jnp.ndarray,
                                  pi_params: jnp.ndarray,
