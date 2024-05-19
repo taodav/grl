@@ -8,7 +8,7 @@ hparams = {
     'entry': '-m scripts.batch_run_kitchen_sinks',
     'args': [{
         'spec': [
-            'tmaze_5_two_thirds_up'
+            'tmaze_5_two_thirds_up',
             'cheese.95'
             # 'hallway'
             # 'bridge-repair',
