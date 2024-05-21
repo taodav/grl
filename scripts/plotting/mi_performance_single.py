@@ -23,8 +23,8 @@ from definitions import ROOT_DIR
 
 if __name__ == "__main__":
     experiment_dirs = [
-        # Path(ROOT_DIR, 'results', 'batch_run_kitchen'),
-        Path(ROOT_DIR, 'results', 'kitchen_leave_out'),
+        Path(ROOT_DIR, 'results', 'batch_run_kitchen'),
+        # Path(ROOT_DIR, 'results', 'kitchen_leave_out'),
     ]
 
     vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -216,8 +216,8 @@ if __name__ == "__main__":
     # ax.legend(bbox_to_anchor=(0.317, 0.62), framexalpha=0.95)
     # ax.set_title(f"Memory Iteration ({policy_optim_alg})")
     # alpha_str = 'uniform' if alpha == 1. else 'occupancy'
-    residual_str = 'semi_grad' if not residual else 'residual'
-    title_str = " vs. ".join([f"{exp} ({hatch})" for exp, hatch in zip(experiments, exp_hatches)]) + f"\n residual: {residual_str}, init_policy: {plot_key}"
+    # residual_str = 'semi_grad' if not residual else 'residual'
+    title_str = " vs. ".join([f"{exp} ({hatch})" for exp, hatch in zip(experiments, exp_hatches)]) + f"\n init_policy: {plot_key}"
     # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
     ax.set_title(title_str)
 

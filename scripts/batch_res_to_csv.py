@@ -124,7 +124,7 @@ def parse_exp_dir(exp_dir: Path):
 
 
 if __name__ == "__main__":
-    exp_dir = Path(ROOT_DIR, 'results', 'batch_run_kitchen')
+    exp_dir = Path(ROOT_DIR, 'results', 'kitchen_leave_out')
 
     csv_save_path = exp_dir.parent / f'{exp_dir.stem}.csv'
 
