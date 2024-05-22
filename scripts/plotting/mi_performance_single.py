@@ -23,8 +23,8 @@ from definitions import ROOT_DIR
 
 if __name__ == "__main__":
     experiment_dirs = [
-        Path(ROOT_DIR, 'results', 'batch_run_kitchen'),
-        # Path(ROOT_DIR, 'results', 'kitchen_leave_out'),
+        # Path(ROOT_DIR, 'results', 'batch_run_kitchen'),
+        Path(ROOT_DIR, 'results', 'kitchen_leave_out_30seeds'),
     ]
 
     vi_results_dir = Path(ROOT_DIR, 'results', 'vi')

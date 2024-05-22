@@ -11,43 +11,60 @@ from definitions import ROOT_DIR
 
 
 if __name__ == "__main__":
-    exp_path_1 = Path(ROOT_DIR, 'results', 'kitchen_leave_out_8',
-                      'tmaze_5_two_thirds_up_batch_run_seed(2024)_time(20240519-152547)_9bda83c52cab992d0b090497b814293b.npy')
+    exp_dir = Path(ROOT_DIR, 'results', 'kitchen_leave_out_8_30seeds')
 
-    exp_path_2 = Path(ROOT_DIR, 'results', 'kitchen_leave_out_8',
-                      'tmaze_5_two_thirds_up_batch_run_seed(2029)_time(20240519-152551)_103dc9ead45d5310253e28cf452eee32.npy')
+    all_env_res = {}
 
-    new_path = Path(ROOT_DIR, 'results', 'kitchen_leave_out_8',
-                    'tmaze_5_two_thirds_up_batch_run_seed(2024+2029)_time(20240519-152547)_9bda83c52cab992d0b090497b814293b.npy')
+    for exp_path in exp_dir.iterdir():
+        restored = load_info(exp_path)
 
-    restored_1 = load_info(exp_path_1)
-    restored_2 = load_info(exp_path_2)
+        args = restored['args']
+        env = args['spec']
+        args_less_seed = {k: v for k, v in args.items() if k != 'seed' and k != 'n_seeds'}
 
-    args_1 = restored_1['args']
-    args_2 = restored_2['args']
+        if env not in all_env_res:
+
+            all_env_res[env] = {
+                'args_less_seed': [args_less_seed],
+                'n_total_seeds': args['n_seeds'],
+                'seeds': [args['seed']],
+                'all_logs': [restored['logs']],
+                'example_restored': restored,
+                'first_path_name': exp_path.name
+            }
+        else:
+            all_env_res[env]['args_less_seed'].append(args_less_seed)
+            all_env_res[env]['n_total_seeds'] += args['n_seeds']
+            all_env_res[env]['seeds'].append(args['seed'])
+            all_env_res[env]['all_logs'].append(restored['logs'])
 
     # here we compare args
-    for k in restored_1['args'].keys():
-        if k == 'n_seeds' or k == 'seed':
-            continue
+    for env, res in all_env_res.items():
+        assert len(res['args_less_seed']) > 1
+        example_arg = res['args_less_seed'][0]
 
-        if isinstance(args_1[k], list):
-            for a1, a2 in zip(args_1[k], args_2[k]):
-                assert a1 == a2
-        if isinstance(args_1[k], np.ndarray):
-            assert all(args_1[k] == args_2[k])
-        else:
-            assert args_1[k] == args_2[k]
+        for k in example_arg.keys():
+            for arg in res['args_less_seed']:
 
-    new_args = args_1
-    new_args['n_seeds'] = args_1['n_seeds'] + args_2['n_seeds']
+                if isinstance(arg[k], list):
+                    for a1, a2 in zip(arg[k], example_arg[k]):
+                        assert a1 == a2
+                if isinstance(arg[k], np.ndarray):
+                    assert all(arg[k] == example_arg[k])
+                else:
+                    assert arg[k] == example_arg[k]
 
-    new_out = jax.tree_map(lambda x, y: np.concatenate([x, y], axis=0), restored_1['logs'], restored_2['logs'])
+        def ccat(*args):
+            return np.concatenate(args, axis=0)
 
-    new_checkpoint = restored_1
-    new_checkpoint['args'] = new_args
-    new_checkpoint['logs'] = new_out
+        new_exp_path = Path(ROOT_DIR, 'results', 'kitchen_leave_out_8_30seeds')
+        new_ckpt = res['example_restored']
+        new_ckpt['args']['n_seeds'] = res['n_total_seeds']
+        new_ckpt['logs'] = jax.tree_map(ccat, *res['all_logs'])
 
-    print(f"Saving combined results to {new_path}")
-    numpyify_and_save(new_path, new_checkpoint)
+        seeds_concat = '+'.join(map(str, sorted(res['seeds'])))
+        new_path = exp_dir / res['first_path_name'].replace(f"seed({res['seeds'][0]})", f"seed({seeds_concat})")
+        print(f"Saving combined results for {env} to {new_path}")
+
+        numpyify_and_save(new_path, new_ckpt)
 
