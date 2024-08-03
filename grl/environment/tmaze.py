@@ -112,7 +112,7 @@ def slippery_tmaze(n: int, discount: float = 0.9, slip_prob: float = 0.1):
 
     return T, R, discount, p0, phi
 
-def fixed_four_tmaze(n: int = 1, discount: float = 0.9,
+def fixed_four_tmaze(n: int = 0, discount: float = 0.9,
                good_term_reward: float = 1.0,
                bad_term_reward: float = -1.):
     n_states = 4 * n # Corridor

@@ -835,7 +835,7 @@ def tmaze_5_two_thirds_up():
 
 def fixed_four_tmaze_two_thirds_up():
     # n_obs x n_actions
-    n = 1
+    n = 0
     discount = 0.9
     Pi_phi = [
         np.array([

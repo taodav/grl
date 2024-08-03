@@ -16,7 +16,7 @@ def convert_arr_to_lines(arr: np.ndarray) -> Union[str, list]:
 if __name__ == '__main__':
     spec_name = 'fixed_four_tmaze_two_thirds_up'
     # spec_name = 'paint.95'
-    spec = load_spec(spec_name, corridor_length=2)
+    spec = load_spec(spec_name)
     pomdp_files_dir = Path(ROOT_DIR, 'grl', 'environment', 'pomdp_files')
     pomdp_path = pomdp_files_dir / 'parity_check.POMDP'
     # pomdp_path = pomdp_files_dir / 'paint.95-action-cross.POMDP'
