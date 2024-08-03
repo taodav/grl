@@ -11,7 +11,7 @@ from definitions import ROOT_DIR
 
 
 if __name__ == "__main__":
-    exp_dir = Path(ROOT_DIR, 'results', 'kitchen_leave_out_8_30seeds')
+    exp_dir = Path(ROOT_DIR, 'results', 'kitchen_leave_out_parity_8_30seeds')
 
     all_env_res = {}
 
