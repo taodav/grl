@@ -7,7 +7,7 @@ from grl.utils.mdp import to_dict
 
 from definitions import ROOT_DIR
 
-from .tmaze import tmaze, slippery_tmaze, four_tmaze
+from .tmaze import tmaze, slippery_tmaze, four_tmaze, fixed_four_tmaze
 from .compass_world import compass_world
 
 """
@@ -832,6 +832,25 @@ def tmaze_5_two_thirds_up():
     # memory policy is observations * memory bits (2) x n_actions
     Pi_phi_x = [Pi_phi[0].repeat(2, axis=0)]
     return to_dict(*tmaze(n, discount=discount), Pi_phi, Pi_phi_x)
+
+def fixed_four_tmaze_two_thirds_up():
+    # n_obs x n_actions
+    n = 1
+    discount = 0.9
+    Pi_phi = [
+        np.array([
+            [1, 0],
+            [1, 0],
+            [1, 0],
+            [1, 0],
+            [1, 0],
+            [2 / 3, 1 / 3],
+            [1, 0]])
+    ]
+
+    # memory policy is observations * memory bits (2) x n_actions
+    Pi_phi_x = [Pi_phi[0].repeat(2, axis=0)]
+    return to_dict(*fixed_four_tmaze(n, discount=discount), Pi_phi, Pi_phi_x)
 
 def four_tmaze_two_thirds_up():
     # n_obs x n_actions

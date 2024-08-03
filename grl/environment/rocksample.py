@@ -1,12 +1,13 @@
 import json
-import gymnasium as gym
-import jax
-import numpy as np
-import jax.numpy as jnp
-from jax import jit, random, vmap
-from typing import Tuple
 from itertools import product
 from pathlib import Path
+from typing import Tuple
+
+import gymnasium as gym
+import jax
+import jax.numpy as jnp
+from jax import jit, random, vmap
+import numpy as np
 
 from grl.utils.math import euclidian_dist
 

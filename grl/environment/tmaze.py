@@ -112,6 +112,99 @@ def slippery_tmaze(n: int, discount: float = 0.9, slip_prob: float = 0.1):
 
     return T, R, discount, p0, phi
 
+def fixed_four_tmaze(n: int = 1, discount: float = 0.9,
+               good_term_reward: float = 1.0,
+               bad_term_reward: float = -1.):
+    n_states = 4 * n # Corridor
+    n_states += 4 # Start
+    n_states += 4 # Second start
+    n_states += 4 # Junction
+    n_states += 1 # Terminal state (includes both goal/non-goal)
+
+    J_UP_1 = -5
+    J_DOWN_1 = -4
+    J_UP_2 = -3
+    J_DOWN_2 = -2
+    junctions = [J_UP_1, J_DOWN_1, J_UP_2, J_DOWN_2]
+
+    S_UP_1 = 0
+    S_DOWN_1 = 1
+    S_UP_2 = 2
+    S_DOWN_2 = 3
+    starts = [S_UP_1, S_DOWN_1, S_UP_2, S_DOWN_2]
+
+    SS_UP_1 = 4
+    SS_DOWN_1 = 5
+    SS_UP_2 = 6
+    SS_DOWN_2 = 7
+    second_starts = [SS_UP_1, SS_DOWN_1, SS_UP_2, SS_DOWN_2]
+
+    T_up = np.zeros((n_states, n_states))
+    T_down = T_up.copy()
+
+    # If we go up or down at the junctions, we terminate
+    terminals = [TERMINAL] * 4
+    T_up[junctions, terminals] = 1
+    T_down[junctions, terminals] = 1
+
+    all_nonterminal_idxes = np.arange(n_states - 1)
+    # Always go right
+    T_up[all_nonterminal_idxes[:-4], all_nonterminal_idxes[4:]] = 1
+    T_down[all_nonterminal_idxes[:-4], all_nonterminal_idxes[4:]] = 1
+
+
+    T = np.array([T_up, T_down])
+
+    # Specify last state as terminal
+
+    T[:, TERMINAL, TERMINAL] = 1
+
+    R_up = np.zeros((n_states, n_states))
+
+    R_down = R_up.copy()
+
+    # If rewarding state is north
+
+    R_up[[J_UP_1, J_UP_2], [TERMINAL, TERMINAL]] = good_term_reward
+
+    R_down[[J_UP_1, J_UP_2], [TERMINAL, TERMINAL]] = bad_term_reward
+
+    # If rewarding state is south
+
+    R_up[[J_DOWN_1, J_DOWN_2], [TERMINAL, TERMINAL]] = bad_term_reward
+
+    R_down[[J_DOWN_1, J_DOWN_2], [TERMINAL, TERMINAL]] = good_term_reward
+
+    R = np.array([R_up, R_down])
+
+    # Initialize uniformly at random between north start and south start
+    p0 = np.zeros(n_states)
+    p0[:4] = 1/4
+
+    # Observation function with have 5 possible obs:
+    # start_up, start_down, corridor, junction, and terminal
+    phi = np.zeros((n_states, 6 + 1))
+
+    # The two start states have observations of their own
+    # (up or down)
+    phi[[S_UP_1, S_DOWN_1], [0, 0]] = 1
+    phi[[S_UP_2, S_DOWN_2], [1, 1]] = 1
+
+    phi[[SS_UP_1, SS_DOWN_2], [2, 2]] = 1
+    phi[[SS_DOWN_1, SS_UP_2], [3, 3]] = 1
+
+    # All corridor states share the same observation (idx 2)
+    phi[SS_DOWN_2 + 1:J_UP_1, 4] = 1
+
+    # All junction states share the same observation (idx 3)
+    phi[junctions, [5] * len(junctions)] = 1
+
+    # we have a special termination observations
+    phi[-1, 6] = 1
+
+    return T, R, discount, p0, phi
+
+
 def four_tmaze(n: int = 1, discount: float = 0.9,
                good_term_reward: float = 4.0,
                bad_term_reward: float = -0.1):
