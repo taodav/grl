@@ -131,7 +131,7 @@ if __name__ == "__main__":
     args_to_keep = ['spec', 'n_mem_states', 'seed', 'objective']
 
     spec_plot_order = [
-        'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up'
+        'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up', 'parity_check'
     ]
 
     vi_results_dir = Path(ROOT_DIR, 'results', 'vi')

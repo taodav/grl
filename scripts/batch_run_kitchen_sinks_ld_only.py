@@ -121,6 +121,15 @@ def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callab
     all_policy_measures, _, _ = batch_measures(policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
 
+def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
+                                mem_params: jnp.ndarray,
+                                pomdp: POMDP):
+  mem_policies = policies.repeat(mem_params.shape[-1], axis=1)
+  batch_measures = jax.vmap(mem_discrep_loss, in_axes=(None, 0, None))
+  all_policy_measures = batch_measures(mem_params, mem_policies, pomdp)
+  return policies[jnp.argmax(all_policy_measures)]
+
+
 def make_experiment(args):
 
     # Get POMDP definition
@@ -190,18 +199,19 @@ def make_experiment(args):
         if args.leave_out_optimal:
             pis_with_memoryless_optimal = pi_paramses[:-1]
 
+        # We initialize mem params
+        mem_shape = (pomdp.action_space.n, pomdp.observation_space.n, args.n_mem_states, args.n_mem_states)
+        mem_params = random.normal(mem_rng, shape=mem_shape) * 0.5
+
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        ld_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
-        pis_to_learn_mem = jnp.stack([ld_pi_params])
+        # ld_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
+        ld_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
+        pis_to_learn_mem = ld_pi_params
 
         kitchen_sinks_info['ld'] = ld_pi_params.copy()
 
-        # We initialize 3 mem params: 1 for LD
-        mem_shape = (pis_to_learn_mem.shape[0], pomdp.action_space.n, pomdp.observation_space.n, args.n_mem_states, args.n_mem_states)
-        mem_params = random.normal(mem_rng, shape=mem_shape) * 0.5
-
-        mem_tx_params = jax.vmap(optim.init, in_axes=0)(mem_params)
+        mem_tx_params = optim.init(mem_params)
 
         info['beginning']['init_mem_params'] = mem_params.copy()
         info['after_kitchen_sinks'] = kitchen_sinks_info
@@ -238,18 +248,18 @@ def make_experiment(args):
             return new_mem_params, pi_params, mem_tx_params, loss
 
         # Make our vmapped memory function
-        update_ld_step = jax.vmap(partial(update_mem_step, objective='discrep', residual=True), in_axes=0)
+        update_ld_step = partial(update_mem_step, objective='discrep', residual=False)
 
         def scan_wrapper(inps, i, f: Callable):
-            mem_params, pi_params, mem_tx_params, = inps
+            mem_params, pi_params, mem_tx_params = inps
             new_mem_params, pi_params, mem_tx_params, loss = f(mem_params, pi_params, mem_tx_params)
             return (new_mem_params, pi_params, mem_tx_params), loss
 
         scan_tqdm_dec = scan_tqdm(args.mi_steps)
         update_ld_step = scan_tqdm_dec(partial(scan_wrapper, f=update_ld_step))
 
-        mem_aug_pi_paramses = jax.vmap(new_pi_over_mem, in_axes=(0, None))(pis_to_learn_mem, args.n_mem_states)
-        batch_mem_log_all_measures = jax.vmap(augment_and_log_all_measures, in_axes=(0, None, 0))
+        mem_aug_pi_paramses = new_pi_over_mem(pis_to_learn_mem, args.n_mem_states)
+        batch_mem_log_all_measures = augment_and_log_all_measures
         mem_input_tuple = (mem_params, mem_aug_pi_paramses, mem_tx_params)
 
         # Memory iteration for all of our measures
@@ -280,22 +290,20 @@ def make_experiment(args):
         # now we do policy improvement over the learnt memory
         # reset pi indices, and mem_augment
         rng, pi_rng = random.split(rng)
-        new_pi_paramses = reverse_softmax(get_unif_policies(pi_rng, pi_shape, mem_params.shape[0]))
-        mem_aug_pi_paramses = new_pi_paramses.repeat(mem_params.shape[-1], axis=1)
+        new_pi_paramses = reverse_softmax(get_unif_policies(pi_rng, pi_shape, 1))[0]
+        mem_aug_pi_paramses = new_pi_paramses.repeat(mem_params.shape[-1], axis=0)
 
         # Use the same initial random pi params across all final policy improvements.
         all_mem_aug_pi_params = mem_aug_pi_paramses
-        all_mem_pi_tx_paramses = jax.vmap(optim.init, in_axes=0)(all_mem_aug_pi_params)
+        all_mem_pi_tx_paramses = optim.init(all_mem_aug_pi_params)
 
         # Batch policy improvement with PG
-        all_improved_pi_tuple, all_improved_pi_info = jax.vmap(cross_and_improve_pi, in_axes=0)(all_mem_paramses,
-                                                                                                all_mem_aug_pi_params,
-                                                                                                all_mem_pi_tx_paramses)
+        all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(all_mem_paramses, all_mem_aug_pi_params,
+                                                                           all_mem_pi_tx_paramses)
 
         # Retrieve each set of learned pi params
         all_improved_pi_params, _, _ = all_improved_pi_tuple
-        n = 1
-        ld_improved_pi_params = all_improved_pi_params[:n]
+        ld_improved_pi_params = all_improved_pi_params
 
         final_info = {
             'ld': {'pi_params': ld_improved_pi_params,
