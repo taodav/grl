@@ -18,7 +18,7 @@ hparams = {
         'mi_steps': 10000,
         'pi_steps': 10000,
         'optimizer': 'adam',
-        'lr': 0.01,
+        'lr': 0.75,
         'n_mem_states': 8,
         'mi_iterations': 1,
         'random_policies': 100,
