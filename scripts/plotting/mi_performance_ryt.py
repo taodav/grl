@@ -28,7 +28,7 @@ from definitions import ROOT_DIR
 # ]
 
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'batch_run_kitchen'),
+    Path(ROOT_DIR, 'results', 'parity_check_kitchen_sinks_pg'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -44,7 +44,8 @@ compare_to = 'belief'
 policy_optim_alg = 'policy_grad'
 
 spec_plot_order = [
-    'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up'
+    # 'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up'
+    'parity_check'
 ]
 
 # plot_key = 'final_memoryless_optimal_perf'  # for batch_run
@@ -61,12 +62,12 @@ compare_to_dict = parse_baselines(spec_plot_order,
 
 
 # %% codecell
-# all_res_df = parse_dirs(experiment_dirs,
-#                         compare_to_dict,
-#                         args_to_keep)
-all_res_df = parse_batch_dirs(experiment_dirs,
-                              compare_to_dict,
-                              args_to_keep)
+all_res_df = parse_dirs(experiment_dirs,
+                        compare_to_dict,
+                        args_to_keep)
+# all_res_df = parse_batch_dirs(experiment_dirs,
+#                               compare_to_dict,
+#                               args_to_keep)
 
 
 
@@ -121,7 +122,8 @@ def maybe_spec_map(id: str):
         'shuttle.95': 'shuttle',
         'example_7': 'ex. 7',
         'tmaze_5_two_thirds_up': 'tmaze',
-        'tiger-alt-start': 'tiger'
+        'tiger-alt-start': 'tiger',
+        'parity_check': 'parity'
     }
 
 #     spec_map |= prisoners_spec_map
