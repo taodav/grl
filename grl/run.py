@@ -66,6 +66,8 @@ if __name__ == '__main__':
                         help='Second lambda parameter for lambda-discrep')
     parser.add_argument('--alpha', default=1., type=float,
                         help='Temperature parameter, for how uniform our lambda-discrep weighting is')
+    parser.add_argument('--random_reward_projection', action='store_true',
+                        help='Do we use random rewards for optimizing LD?')
     parser.add_argument('--flip_count_prob', action='store_true',
                         help='Do we "invert" our count probabilities for our memory loss?')
     parser.add_argument('--value_type', default='q', type=str,
@@ -175,7 +177,8 @@ if __name__ == '__main__':
                                        epsilon=args.epsilon,
                                        pi_params=pi_params,
                                        kitchen_sink_policies=args.kitchen_sink_policies,
-                                       flip_count_prob=args.flip_count_prob)
+                                       flip_count_prob=args.flip_count_prob,
+                                       random_reward_projection=args.random_reward_projection)
 
     info = {'logs': logs, 'args': args.__dict__}
     agents_dir = results_path.parent / 'agent'

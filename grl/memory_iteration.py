@@ -39,7 +39,8 @@ def run_memory_iteration(pomdp: POMDP,
                          pi_params: jnp.ndarray = None,
                          kitchen_sink_policies: int = 0,
                          epsilon: float = 0.1,
-                         flip_count_prob: bool = False):
+                         flip_count_prob: bool = False,
+                         random_reward_projection: bool = False):
     """
     Wrapper function for the Memory Iteration algorithm.
     Memory iteration intersperses memory improvement and policy improvement.
@@ -101,7 +102,8 @@ def run_memory_iteration(pomdp: POMDP,
                                    mi_per_step=mi_steps,
                                    init_pi_improvement=init_pi_improvement,
                                    kitchen_sink_policies=kitchen_sink_policies,
-                                   discrep_loss=discrep_loss_fn)
+                                   discrep_loss=discrep_loss_fn,
+                                   random_reward_projection=random_reward_projection)
 
     get_measures = partial(lambda_discrep_measures, discrep_loss_fn=discrep_loss_fn)
 
@@ -161,6 +163,7 @@ def memory_iteration(
     kitchen_sink_policies: int = 0,
     discrep_loss: Callable = None,
     log_every: int = 1000,
+    random_reward_projection: bool = False
 ):
     """
     The memory iteration algorithm. This algorithm flips between improving
@@ -255,6 +258,11 @@ def memory_iteration(
         print(f"Starting (expanded) policy: \n{agent.policy}\n")
         print(f"Starting memory: \n{agent.memory}\n")
 
+    init_R = init_pomdp.R
+    if random_reward_projection:
+        agent.rand_key, random_r_key = random.split(agent.rand_key)
+        random_R = random.uniform(random_r_key, shape=init_R.shape)
+
     pomdp = copy.deepcopy(init_pomdp)
 
     for mem_it in range(mi_iterations):
@@ -275,10 +283,17 @@ def memory_iteration(
             # mem_params, mem_optim_state, _, _ = output_tuple
             # agent.mem_params = mem_params
 
+            if random_reward_projection:
+                init_pomdp.R = random_R
+
             mem_loss = mem_improvement(agent,
                                        init_pomdp,
                                        iterations=mi_per_step,
                                        log_every=log_every)
+
+            if random_reward_projection:
+                init_pomdp.R = init_R
+
             next_time = time.time()
             print(f"Time for MI {mem_it}: {next_time - prev_time:.4f} seconds")
             info['mem_loss'].append(mem_loss)
