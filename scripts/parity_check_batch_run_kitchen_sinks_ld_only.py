@@ -121,6 +121,15 @@ def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callab
     all_policy_measures, _, _ = batch_measures(policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
 
+def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
+                                mem_params: jnp.ndarray,
+                                pomdp: POMDP):
+  mem_policies = policies.repeat(mem_params.shape[-1], axis=1)
+  batch_measures = jax.vmap(mem_discrep_loss, in_axes=(None, 0, None))
+  all_policy_measures = batch_measures(mem_params, mem_policies, pomdp)
+  return policies[jnp.argmax(all_policy_measures)]
+
+
 def make_experiment(args):
 
     # Get POMDP definition
@@ -196,8 +205,8 @@ def make_experiment(args):
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        ld_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
-
+        # ld_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
+        ld_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
         pis_to_learn_mem = ld_pi_params
 
         kitchen_sinks_info['ld'] = ld_pi_params.copy()

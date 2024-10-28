@@ -5,7 +5,7 @@ exp_name = Path(__file__).stem
 hparams = {
     'file_name':
         f'runs_{exp_name}.txt',
-    'entry': '-m scripts.batch_run_kitchen_sinks_ld_only',
+    'entry': '-m scripts.parity_check_batch_run_kitchen_sinks_ld_only',
     'args': [{
         'spec': [
             'parity_check'
