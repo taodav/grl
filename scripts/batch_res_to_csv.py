@@ -77,10 +77,15 @@ def parse_exp_dir(exp_dir: Path):
             final = logs['final']
             final_measures = final[key]['measures']
             if 'kitchen' in exp_dir.stem:
-                # For now, we assume kitchen selection objective == mem learning objective
-                final_mem_perf = np.einsum('ij,ij->i',
-                                           final_measures['values']['state_vals']['v'][:, i],
-                                           final_measures['values']['p0'][:, i])
+                v_vals = final_measures['values']['state_vals']['v']
+                p0 = final_measures['values']['p0']
+                if len(p0.shape) == 2:
+                    final_mem_perf = (v_vals * p0).sum(axis=-1)
+                else:
+                    # For now, we assume kitchen selection objective == mem learning objective
+                    final_mem_perf = np.einsum('ij,ij->i',
+                                               v_vals[:, i],
+                                               p0[:, i])
 
             else:
                 final_mem_perf = np.einsum('ij,ij->i',
@@ -131,7 +136,7 @@ if __name__ == "__main__":
     args_to_keep = ['spec', 'n_mem_states', 'seed', 'objective']
 
     spec_plot_order = [
-        'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up'
+        'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up', 'parity_check'
     ]
 
     vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
