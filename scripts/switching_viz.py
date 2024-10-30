@@ -61,6 +61,11 @@ def get_value_fns(pomdp, batch_size: int = 100, bins: int = 20):
     )
     state_vals = jax.tree.map(lambda x: x.reshape(-1, x.shape[-1]), state_vals)
 
+    pi_obs_state_vals, pi_obs_mc_vals, pi_obs_td_vals, info = obs_vals
+    pi_obs_state_v, pi_obs_mc_v, pi_obs_td_v = pi_obs_state_vals['v'], pi_obs_mc_vals['v'], pi_obs_td_vals['v']
+
+    # TODO: here we need to copy each obs val into their corresponding state vals
+
     return obs_vals, state_vals
 
 
