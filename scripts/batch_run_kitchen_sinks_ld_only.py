@@ -27,7 +27,6 @@ from grl.utils.math import reverse_softmax
 from grl.utils.loss import (
     pg_objective_func,
     discrep_loss,
-    mstd_err,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
@@ -35,7 +34,6 @@ from grl.utils.loss import (
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
-from grl.vi import policy_iteration_step
 
 
 def get_args():
@@ -63,6 +61,8 @@ def get_args():
                         help='For memory iteration, how many iterations of memory iterations do we do?')
     parser.add_argument('--mi_steps', type=int, default=20000,
                         help='For memory iteration, how many steps of memory improvement do we do per iteration?')
+    parser.add_argument('--save_mem_freq', type=int, default=100,
+                        help='How often do we save our mem params during updates?')
     parser.add_argument('--pi_steps', type=int, default=10000,
                         help='For memory iteration, how many steps of policy improvement do we do per iteration?')
 
@@ -244,7 +244,7 @@ def make_experiment(args):
         def scan_wrapper(inps, i, f: Callable):
             mem_params, pi_params, mem_tx_params = inps
             new_mem_params, pi_params, mem_tx_params, loss = f(mem_params, pi_params, mem_tx_params)
-            return (new_mem_params, pi_params, mem_tx_params), loss
+            return (new_mem_params, pi_params, mem_tx_params), (loss, new_mem_params)
 
         scan_tqdm_dec = scan_tqdm(args.mi_steps)
         update_ld_step = scan_tqdm_dec(partial(scan_wrapper, f=update_ld_step))
@@ -256,9 +256,10 @@ def make_experiment(args):
         # Memory iteration for all of our measures
         print("Starting {} iterations of λ-discrepancy minimization", args.mi_steps)
         after_mem_op_info = {}
-        ld_mem_out, losses = jax.lax.scan(update_ld_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
+        ld_mem_out, (losses, all_mem_params) = jax.lax.scan(update_ld_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
         ld_mem_paramses, ld_pi_paramses, _ = ld_mem_out
         ld_mem_info = {'mems': ld_mem_paramses,
+                       'all_mem_params': all_mem_params[::args.save_mem_freq],
                        'measures': batch_mem_log_all_measures(ld_mem_paramses, pomdp, ld_pi_paramses)}
         after_mem_op_info['ld'] = ld_mem_info
 
