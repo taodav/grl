@@ -61,12 +61,24 @@ def get_value_fns(pomdp, batch_size: int = 100, bins: int = 20):
     )
     state_vals = jax.tree.map(lambda x: x.reshape(-1, x.shape[-1]), state_vals)
 
+    state_v, state_q = state_vals
+
     pi_obs_state_vals, pi_obs_mc_vals, pi_obs_td_vals, info = obs_vals
     pi_obs_state_v, pi_obs_mc_v, pi_obs_td_v = pi_obs_state_vals['v'], pi_obs_mc_vals['v'], pi_obs_td_vals['v']
 
-    # TODO: here we need to copy each obs val into their corresponding state vals
+    # Here we need to copy each obs val into their corresponding state vals
+    obs_to_state_mask = pomdp.phi.T > 0
+    pi_obs_state_mc_v = jnp.matmul(pi_obs_mc_v, obs_to_state_mask)
+    pi_obs_state_td_v = jnp.matmul(pi_obs_td_v, obs_to_state_mask)
 
-    return obs_vals, state_vals
+    res = {
+        'state_v': state_v,
+        'pi_obs_state_v': pi_obs_state_v,
+        'pi_obs_state_mc_v': pi_obs_state_mc_v,
+        'pi_obs_state_td_v': pi_obs_state_td_v
+    }
+
+    return res
 
 
 if __name__ == "__main__":
@@ -79,12 +91,10 @@ if __name__ == "__main__":
 
     assert pomdp.action_space.n == 2, "Haven't implemented pi's with action spaces > 2"
 
-    obs_vals, state_vals = get_value_fns(pomdp, batch_size=batch_size, bins=bins)
+    vals = get_value_fns(pomdp, batch_size=batch_size, bins=bins)
 
-    pi_obs_state_vals, pi_obs_mc_vals, pi_obs_td_vals, info = obs_vals
-    pi_obs_state_v, pi_obs_mc_v, pi_obs_td_v = pi_obs_state_vals['v'], pi_obs_mc_vals['v'], pi_obs_td_vals['v']
+    # Now we plot our value functions
 
-    state_v, state_q = state_vals
 
     print()
 
