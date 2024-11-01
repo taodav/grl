@@ -1,15 +1,17 @@
-from functools import partial
-from itertools import product
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 from jax_tqdm import scan_tqdm
+import numpy as np
+import pyvista as pv
 
 from grl.environment import load_pomdp
+from grl.utils.file_system import load_info
 from grl.utils.policy_eval import analytical_pe, functional_solve_mdp
 
 
-def get_value_fns(pomdp, batch_size: int = 100, bins: int = 20):
+def get_value_fns(pomdp, eval_obs_policy: jnp.ndarray = None, batch_size: int = 100, bins: int = 20):
 
     def get_interpolated_pis(n_obs: int):
         prob_vals = jnp.linspace(0, 1, num=bins)
@@ -78,12 +80,30 @@ def get_value_fns(pomdp, batch_size: int = 100, bins: int = 20):
         'pi_obs_state_td_v': pi_obs_state_td_v
     }
 
+    if eval_obs_policy is not None:
+        eval_pi_state_vals, eval_pi_mc_vals, eval_pi_td_vals, _ = analytical_pe(eval_obs_policy, pomdp)
+        eval_pi_state_v, eval_pi_mc_v, eval_pi_td_v = eval_pi_state_vals['v'], eval_pi_mc_vals['v'], eval_pi_td_vals['v']
+        res['eval_pi_state_mc_v'] = jnp.matmul(eval_pi_mc_v, obs_to_state_mask)
+        res['eval_pi_state_td_v'] = jnp.matmul(eval_pi_td_v, obs_to_state_mask)
+
     return res
 
 
 if __name__ == "__main__":
     batch_size = 100
-    bins = 20
+    bins = 30
+
+    # we load our memory
+    mem_opt_path = Path(
+        '/Users/ruoyutao/Documents/grl/results/switching_batch_run_seed(2024)_time(20241030-100457)_fdcead0bf0726bb08b24f88e8c72f0b3.npy')
+
+    res = load_info(mem_opt_path)
+    all_mem_params = res['logs']['after_mem_op']['ld']['all_mem_params'][0]  # steps x *mem_size
+    init_sampled_pi = res['logs']['after_kitchen_sinks']['ld'][0]  # obs x actions
+
+    # repeat initial policy over num mem states
+    n_mem = all_mem_params.shape[-1]
+    mem_repeated_init_pi = init_sampled_pi.repeat(n_mem, axis=0)
 
     pomdp, pi_dict = load_pomdp('switching',
                                 memory_id=0,
@@ -91,10 +111,30 @@ if __name__ == "__main__":
 
     assert pomdp.action_space.n == 2, "Haven't implemented pi's with action spaces > 2"
 
-    vals = get_value_fns(pomdp, batch_size=batch_size, bins=bins)
+    vals = get_value_fns(pomdp, eval_obs_policy=init_sampled_pi, batch_size=batch_size, bins=bins)
+    vals_term_removed = jax.tree.map(lambda x: np.array(x[:, :3]), vals)
 
     # Now we plot our value functions
+    plotter = pv.Plotter()
 
+    state_val_cloud = pv.PolyData(vals_term_removed['state_v'])
+    plotter.add_mesh(state_val_cloud, color='maroon', point_size=3, opacity=0.025,
+                     label='pi(s)')
+
+    pi_obs_state_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_v'])
+    plotter.add_mesh(pi_obs_state_val_cloud, point_size=6, color='blue',
+                     label='pi(o)')
+
+    # pi_obs_state_mc_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_mc_v'])
+    # plotter.add_mesh(pi_obs_state_mc_val_cloud, point_size=6, color='orange',
+    #                  label='pi(o), V_mc')
+    #
+    # pi_obs_state_td_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_td_v'])
+    # plotter.add_mesh(pi_obs_state_td_val_cloud, point_size=6, color='cyan',
+    #                  label='pi(o), V_td')
+
+    plotter.show_grid(xlabel='start val', ylabel='middle val', zlabel='right val')
+    plotter.show()
 
     print()
 

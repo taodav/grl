@@ -12,7 +12,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from jax import random, value_and_grad, nn
-from jax.config import config
+from jax import config
 from jax.debug import print
 from jax_tqdm import scan_tqdm
 import optax
