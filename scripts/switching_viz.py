@@ -39,7 +39,7 @@ def solve_large_obs_vals(obs_pis: jnp.ndarray, pomdp: POMDP,
     n_rest_obs = obs_pis.shape[0] // batch_size
     batch_obs_pis = obs_pis.reshape((n_rest_obs, batch_size, *obs_pis.shape[1:]))
 
-    @scan_tqdm(n_rest_obs)
+    # @scan_tqdm(n_rest_obs)
     @jax.jit
     def solve_obs(_, inp):
         i, obs_pi = inp
@@ -64,7 +64,7 @@ def solve_large_state_vals(state_pis: jnp.ndarray, pomdp: POMDP,
 
     vmap_functional_solve_mdp = jax.vmap(functional_solve_mdp, in_axes=[0, None])
 
-    @scan_tqdm(n_rest_state)
+    # @scan_tqdm(n_rest_state)
     @jax.jit
     def solve_state(_, inp):
         i, state_pi = inp
@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
     # we load our memory
     mem_opt_path = Path(
-        '/Users/ruoyutao/Documents/grl/results/switching_batch_run_seed(2024)_time(20241030-100457)_fdcead0bf0726bb08b24f88e8c72f0b3.npy')
+        '/home/taodav/Documents/grl/results/switching_batch_run_seed(2024)_time(20241106-133112)_a35186d2dbca57ef82d22ed3957b7ef8.npy')
 
     res = load_info(mem_opt_path)
     all_mem_params = res['logs']['after_mem_op']['ld']['all_mem_params'][0]  # steps x *mem_size
@@ -169,8 +169,17 @@ if __name__ == "__main__":
     vals, info = get_value_fns(pomdp, eval_obs_policy=init_sampled_pi, batch_size=batch_size, bins=bins)
     vals_term_removed = jax.tree.map(lambda x: np.array(x[..., :3]), vals)
 
-    vmapped_get_mem_vals = jax.vmap(get_mem_vals, in_axes=[0, None])
-    mem_vals = vmapped_get_mem_vals(all_mem_params, pomdp)
+    @scan_tqdm(all_mem_params.shape[0])
+    def mem_vals_scan_wrapper(_, inp):
+        i, mem_params = inp
+        return _, get_mem_vals(mem_params, pomdp)
+
+    _, mem_vals = jax.lax.scan(
+        mem_vals_scan_wrapper, None, (jnp.arange(all_mem_params.shape[0]), all_mem_params), all_mem_params.shape[0]
+    )
+    # vmapped_get_mem_vals = jax.vmap(get_mem_vals, in_axes=[0, None])
+    # mem_vals = vmapped_get_mem_vals(all_mem_params, pomdp)
+
     mem_vals_term_removed = jax.tree.map(lambda x: np.array(x[..., :3]), mem_vals)
 
     # Now we plot our value functions
@@ -186,17 +195,17 @@ if __name__ == "__main__":
 
     def create_mesh(value, widget):
         # use 'value' to adjust the number of points plotted
-        idx = round(value)
-        widget.GetSliderRepresentation().SetValue(idx)  # snap slider to nearest int
-        widget.GetSliderRepresentation().SetLabelFormat('%.0f')  # format text so it does not display decimal values
+        idx = int(value)
+        # widget.GetSliderRepresentation().SetValue(idx)  # snap slider to nearest int
+        # widget.GetSliderRepresentation().SetLabelFormat('%.0f')  # format text so it does not display decimal values
         mem_0_mc_pc = pv.PolyData(mem_vals_term_removed['mem_0_state_mc_v'][idx])
-        plotter.add_mesh(mem_0_mc_pc, color='blue', point_size=5,
+        plotter.add_mesh(mem_0_mc_pc, color='blue', point_size=5, name='mem_0',
                          label='pi(s)')
         mem_1_mc_pc = pv.PolyData(mem_vals_term_removed['mem_1_state_mc_v'][idx])
-        plotter.add_mesh(mem_1_mc_pc, color='cyan', point_size=5,
+        plotter.add_mesh(mem_1_mc_pc, color='cyan', point_size=5, name='mem_1',
                          label='pi(s)')
 
-    plotter.add_slider_widget(create_mesh, [0, all_mem_params.shape[0]], value=5, title='Update Number', pass_widget=True)
+    plotter.add_slider_widget(create_mesh, [0, all_mem_params.shape[0] - 1], value=0, title='Update Number', pass_widget=True)
     plotter.show()
 
 
