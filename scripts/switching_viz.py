@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 
 import jax
@@ -13,7 +14,7 @@ from grl.utils.mdp import POMDP
 from grl.utils.policy_eval import analytical_pe, functional_solve_mdp
 
 
-@jax.jit(static_argnames=['n_obs', 'bins'])
+@partial(jax.jit, static_argnames=['n_obs', 'bins'])
 def get_interpolated_pis(n_obs: int, bins: int):
     prob_vals = jnp.linspace(0, 1, num=bins)
 
@@ -25,8 +26,13 @@ def get_interpolated_pis(n_obs: int, bins: int):
 
     return jnp.stack([action_0_probs, action_1_probs], axis=-1)
 
+
 def solve_large_obs_vals(obs_pis: jnp.ndarray, pomdp: POMDP,
                          batch_size: int = 100):
+    """
+    Solve for the observation value functions for a large number of policies over observations obs_pi.
+    :param obs_pis: (n_pis, n_obs, n_actions)
+    """
     vmap_analytical_pe = jax.vmap(analytical_pe, in_axes=[0, None])
 
     # make batches
@@ -46,8 +52,13 @@ def solve_large_obs_vals(obs_pis: jnp.ndarray, pomdp: POMDP,
     obs_vals = jax.tree.map(lambda x: x.reshape(-1, x.shape[-1]), obs_vals)
     return obs_vals
 
+
 def solve_large_state_vals(state_pis: jnp.ndarray, pomdp: POMDP,
                            batch_size: int = 100):
+    """
+    Solve for the state value functions for a large number of policies over state, state_pis.
+    :param obs_pis: (n_pis, n_obs, n_actions)
+    """
     n_rest_state = state_pis.shape[0] // batch_size
     batch_state_pis = state_pis.reshape((n_rest_state, batch_size, *state_pis.shape[1:]))
 
@@ -86,8 +97,6 @@ def get_value_fns(pomdp: POMDP, eval_obs_policy: jnp.ndarray = None, batch_size:
     pi_obs_state_td_v = jnp.matmul(pi_obs_td_v, obs_to_state_mask)
 
     res = {
-        'interpolated_obs_pis': obs_pis,
-        'interpolated_state_pis': state_pis,
         'state_v': state_v,
         'pi_obs_state_v': pi_obs_state_v,
         'pi_obs_state_mc_v': pi_obs_state_mc_v,
@@ -100,16 +109,17 @@ def get_value_fns(pomdp: POMDP, eval_obs_policy: jnp.ndarray = None, batch_size:
         res['eval_pi_state_mc_v'] = jnp.matmul(eval_pi_mc_v, obs_to_state_mask)
         res['eval_pi_state_td_v'] = jnp.matmul(eval_pi_td_v, obs_to_state_mask)
 
-    return res
+    return res, { 'interpolated_obs_pis': obs_pis, 'interpolated_state_pis': state_pis }
 
-def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP, obs_pis: jnp.ndarray,
-                 batch_size: int = 100):
+
+def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP,
+                 batch_size: int = 128, bins: int = 8):
     n_mem = mem_params.shape[-1]
     assert n_mem == 2
 
     mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
 
-    mem_aug_interpolated_pis = obs_pis.repeat(n_mem, axis=1)  # 0th dimension is the stack
+    mem_aug_interpolated_pis = get_interpolated_pis(mem_aug_pomdp.phi.shape[-1], bins=bins)  # 0th dimension is the stack
 
     mem_aug_obs_vals = solve_large_obs_vals(mem_aug_interpolated_pis, mem_aug_pomdp, batch_size=batch_size)
 
@@ -124,25 +134,18 @@ def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP, obs_pis: jnp.ndarray,
     mem_state_td_v = jnp.matmul(mem_td_v, obs_to_state_mask)  # S * M
 
     # TODO: pretty easily convert to n_mem
-    mem_0_state_mc_v = mem_state_mc_v[::2]
-    mem_1_state_mc_v = mem_state_mc_v[1::2]
+    mem_0_state_mc_v = mem_state_mc_v[..., ::2]
+    mem_1_state_mc_v = mem_state_mc_v[..., 1::2]
 
-    mem_0_state_td_v = mem_state_td_v[::2]
-    mem_1_state_td_v = mem_state_td_v[1::2]
+    mem_0_state_td_v = mem_state_td_v[..., ::2]
+    mem_1_state_td_v = mem_state_td_v[..., 1::2]
 
-
-    # TODO: do we actually want the vals across all pis? Or for the pi that we're optimizing on?
-    # TODO: could do both. Just need to add eval_pi and do the same thing. or just pass in 1 x *obs_pi thing.
     return {
         'mem_0_state_mc_v': mem_0_state_mc_v,
         'mem_1_state_mc_v': mem_1_state_mc_v,
         'mem_0_state_td_v': mem_0_state_td_v,
         'mem_1_state_td_v': mem_1_state_td_v,
     }
-
-
-
-
 
 
 if __name__ == "__main__":
@@ -155,11 +158,7 @@ if __name__ == "__main__":
 
     res = load_info(mem_opt_path)
     all_mem_params = res['logs']['after_mem_op']['ld']['all_mem_params'][0]  # steps x *mem_size
-    init_sampled_pi = res['logs']['after_kitchen_sinks']['ld'][0]  # obs x actions
-
-    # repeat initial policy over num mem states
-    n_mem = all_mem_params.shape[-1]
-    mem_repeated_init_pi = init_sampled_pi.repeat(n_mem, axis=0)
+    init_sampled_pi = jax.nn.softmax(res['logs']['after_kitchen_sinks']['ld'][0], axis=-1)  # obs x actions
 
     pomdp, pi_dict = load_pomdp('switching',
                                 memory_id=0,
@@ -167,26 +166,52 @@ if __name__ == "__main__":
 
     assert pomdp.action_space.n == 2, "Haven't implemented pi's with action spaces > 2"
 
-    vals = get_value_fns(pomdp, eval_obs_policy=init_sampled_pi, batch_size=batch_size, bins=bins)
-    vals_term_removed = jax.tree.map(lambda x: np.array(x[:, :3]), vals)
+    vals, info = get_value_fns(pomdp, eval_obs_policy=init_sampled_pi, batch_size=batch_size, bins=bins)
+    vals_term_removed = jax.tree.map(lambda x: np.array(x[..., :3]), vals)
+
+    vmapped_get_mem_vals = jax.vmap(get_mem_vals, in_axes=[0, None])
+    mem_vals = vmapped_get_mem_vals(all_mem_params, pomdp)
+    mem_vals_term_removed = jax.tree.map(lambda x: np.array(x[..., :3]), mem_vals)
 
     # Now we plot our value functions
     plotter = pv.Plotter()
 
     state_val_cloud = pv.PolyData(vals_term_removed['state_v'])
-    plotter.add_mesh(state_val_cloud, color='maroon', point_size=3, opacity=0.025,
+    plotter.add_mesh(state_val_cloud, color='gray', point_size=3, opacity=0.01,
                      label='pi(s)')
 
     pi_obs_state_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_v'])
-    plotter.add_mesh(pi_obs_state_val_cloud, point_size=6, color='blue',
+    plotter.add_mesh(pi_obs_state_val_cloud, point_size=5, color='yellow',
                      label='pi(o)')
 
+    def create_mesh(value, widget):
+        # use 'value' to adjust the number of points plotted
+        idx = round(value)
+        widget.GetSliderRepresentation().SetValue(idx)  # snap slider to nearest int
+        widget.GetSliderRepresentation().SetLabelFormat('%.0f')  # format text so it does not display decimal values
+        mem_0_mc_pc = pv.PolyData(mem_vals_term_removed['mem_0_state_mc_v'][idx])
+        plotter.add_mesh(mem_0_mc_pc, color='blue', point_size=5,
+                         label='pi(s)')
+        mem_1_mc_pc = pv.PolyData(mem_vals_term_removed['mem_1_state_mc_v'][idx])
+        plotter.add_mesh(mem_1_mc_pc, color='cyan', point_size=5,
+                         label='pi(s)')
+
+    plotter.add_slider_widget(create_mesh, [0, all_mem_params.shape[0]], value=5, title='Update Number', pass_widget=True)
+    plotter.show()
+
+
+    # mem_0_td_pc = pv.PolyData(mem_vals_term_removed['mem_0_state_td_v'])
+    # plotter.add_mesh(mem_0_td_pc, color='red', point_size=8,
+    #                  label='pi(s)')
+    # mem_1_td_pc = pv.PolyData(mem_vals_term_removed['mem_1_state_td_v'])
+    # plotter.add_mesh(mem_1_td_pc, color='orange', point_size=8,
+    #                  label='pi(s)')
     # pi_obs_state_mc_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_mc_v'])
-    # plotter.add_mesh(pi_obs_state_mc_val_cloud, point_size=6, color='orange',
+    # plotter.add_mesh(pi_obs_state_mc_val_cloud, point_size=6, color='blue',
     #                  label='pi(o), V_mc')
     #
     # pi_obs_state_td_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_td_v'])
-    # plotter.add_mesh(pi_obs_state_td_val_cloud, point_size=6, color='cyan',
+    # plotter.add_mesh(pi_obs_state_td_val_cloud, point_size=6, color='red',
     #                  label='pi(o), V_td')
 
     plotter.show_grid(xlabel='start val', ylabel='middle val', zlabel='right val')
