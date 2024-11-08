@@ -133,6 +133,8 @@ def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP,
     mem_state_mc_v = jnp.matmul(mem_mc_v, obs_to_state_mask)  # S * M
     mem_state_td_v = jnp.matmul(mem_td_v, obs_to_state_mask)  # S * M
 
+    # one_step_mem_state_td_v = mem_aug_pomdp.R + mem_aug_pomdp.gamma * mem_aug_pomdp.T * mem_state_td_v
+
     # TODO: pretty easily convert to n_mem
     mem_0_state_mc_v = mem_state_mc_v[..., ::2]
     mem_1_state_mc_v = mem_state_mc_v[..., 1::2]
@@ -140,11 +142,14 @@ def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP,
     mem_0_state_td_v = mem_state_td_v[..., ::2]
     mem_1_state_td_v = mem_state_td_v[..., 1::2]
 
+
     return {
         'mem_0_state_mc_v': mem_0_state_mc_v,
         'mem_1_state_mc_v': mem_1_state_mc_v,
         'mem_0_state_td_v': mem_0_state_td_v,
         'mem_1_state_td_v': mem_1_state_td_v,
+        # 'one_step_mem_0_state_td_v': one_step_mem_0_state_td_v,
+        # 'one_step_mem_1_state_td_v': one_step_mem_1_state_td_v,
     }
 
 
@@ -161,7 +166,6 @@ class MemDataCallback:
 
     def __call__(self, state: bool):
         self.actor.SetVisibility(state)
-        print(state)
         self.visibility = state
 
 
@@ -170,8 +174,17 @@ if __name__ == "__main__":
     bins = 30
 
     # we load our memory
+
+    # LD
+    objective = 'ld'
     mem_opt_path = Path(
-        '/Users/ruoyutao/Documents/grl/results/switching_batch_run_seed(2024)_time(20241106-135808)_9be879b88548c57cd5fe22dbb19d311a.npy')
+        '/Users/ruoyutao/Documents/grl/results/switching_batch_run_seed(2024)_time(20241106-135808)_9be879b88548c57cd5fe22dbb19d311a.npy'
+    )
+
+    # objective = 'tde'
+    # mem_opt_path = Path(
+    #     '/Users/ruoyutao/Documents/grl/results/switching_batch_run_seed(2024)_time(20241108-153915)_176af0d528f034d57500c84b2034e299.npy'
+    # )
 
     res = load_info(mem_opt_path)
     all_mem_params = res['logs']['after_mem_op']['ld']['all_mem_params'][0]  # steps x *mem_size
@@ -211,12 +224,20 @@ if __name__ == "__main__":
                      label='pi(o)')
 
 
-    all_mem_vals_info = [
-        MemDataCallback(name='mem_0_mc', color='blue', data=mem_vals_term_removed['mem_0_state_mc_v']),
-        MemDataCallback(name='mem_1_mc', color='cyan', data=mem_vals_term_removed['mem_1_state_mc_v']),
-        MemDataCallback(name='mem_0_td', color='red', data=mem_vals_term_removed['mem_0_state_td_v']),
-        MemDataCallback(name='mem_1_td', color='orange', data=mem_vals_term_removed['mem_1_state_td_v']),
-    ]
+    if objective == 'ld':
+        all_mem_vals_info = [
+            MemDataCallback(name='mem_0_mc', color='blue', data=mem_vals_term_removed['mem_0_state_mc_v']),
+            MemDataCallback(name='mem_1_mc', color='cyan', data=mem_vals_term_removed['mem_1_state_mc_v']),
+            MemDataCallback(name='mem_0_td', color='red', data=mem_vals_term_removed['mem_0_state_td_v']),
+            MemDataCallback(name='mem_1_td', color='orange', data=mem_vals_term_removed['mem_1_state_td_v']),
+        ]
+    elif objective == 'tde':
+        all_mem_vals_info = [
+            MemDataCallback(name='one_step_mem_0_td', color='blue', data=mem_vals_term_removed['one_step_mem_0_state_td_v']),
+            MemDataCallback(name='one_step_mem_1_td', color='cyan', data=mem_vals_term_removed['one_step_mem_1_state_td_v']),
+            MemDataCallback(name='mem_0_td', color='red', data=mem_vals_term_removed['mem_0_state_td_v']),
+            MemDataCallback(name='mem_1_td', color='orange', data=mem_vals_term_removed['mem_1_state_td_v']),
+        ]
 
     def create_mesh(value, widget):
         size = 50
@@ -226,9 +247,17 @@ if __name__ == "__main__":
         idx = int(value)
         for d in all_mem_vals_info:
             pc = pv.PolyData(d.data[idx])
-            actor = plotter.add_mesh(pc, color=d.color, point_size=5, name=d.name)
-            actor.SetVisibility(d.visibility)
-            d.actor = actor
+            if d.visibility:
+                actor = plotter.add_mesh(pc, color=d.color, point_size=5, name=d.name)
+                # actor.SetVisibility(d.visibility)
+                d.actor = actor
+            else:
+                d.actor = None
+
+            # def callback(s):
+            #     actor = plotter.add_mesh(pc, color=d.color, point_size=5, name=d.name)
+            #     d.actor = actor
+            #     d(s)
 
             plotter.add_checkbox_button_widget(
                 d,
@@ -245,7 +274,7 @@ if __name__ == "__main__":
                 position=(5 + 60, startpos)
             )
             startpos = startpos + size + (size // 10)
-        plotter.render()
+        # plotter.render()
 
     slider_widget = plotter.add_slider_widget(create_mesh, [0, all_mem_params.shape[0] - 1], value=0, title='Update Number', pass_widget=True)
 

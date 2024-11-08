@@ -27,6 +27,8 @@ from grl.utils.math import reverse_softmax
 from grl.utils.loss import (
     pg_objective_func,
     discrep_loss,
+    mstd_err,
+    bellman_loss,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
@@ -97,7 +99,7 @@ def get_args():
                         help='(POLICY ITERATION AND TMAZE_EPS_HYPERPARAMS ONLY) What epsilon do we use?')
 
     # CURRENTLY NOT USED
-    parser.add_argument('--objectives', default=['discrep'])
+    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual'])
 
     parser.add_argument('--study_name', default=None, type=str,
                         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
@@ -121,6 +123,14 @@ def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callab
     all_policy_measures, _, _ = batch_measures(policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
 
+
+loss_map = {
+    'ld': discrep_loss,
+    'tde': mstd_err,
+    'tde_residual': mstd_err,
+}
+
+
 def make_experiment(args):
 
     # Get POMDP definition
@@ -130,6 +140,9 @@ def make_experiment(args):
                                 corridor_length=args.tmaze_corridor_length,
                                 discount=args.tmaze_discount,
                                 junction_up_pi=args.tmaze_junction_up_pi)
+
+
+
     def experiment(rng: random.PRNGKey):
         info = {}
 
@@ -196,11 +209,11 @@ def make_experiment(args):
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        ld_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
+        measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
 
-        pis_to_learn_mem = ld_pi_params
+        pis_to_learn_mem = measure_pi_params
 
-        kitchen_sinks_info['ld'] = ld_pi_params.copy()
+        kitchen_sinks_info[args.objective] = measure_pi_params.copy()
 
         mem_tx_params = optim.init(mem_params)
 
@@ -211,7 +224,7 @@ def make_experiment(args):
         def update_mem_step(mem_params: jnp.ndarray,
                             pi_params: jnp.ndarray,
                             mem_tx_params: jnp.ndarray,
-                            objective: str = 'discrep',
+                            objective: str = 'ld',
                             residual: bool = False):
             partial_kwargs = {
                 'value_type': args.value_type,
@@ -239,7 +252,7 @@ def make_experiment(args):
             return new_mem_params, pi_params, mem_tx_params, loss
 
         # Make our vmapped memory function
-        update_ld_step = partial(update_mem_step, objective='discrep', residual=False)
+        update_step = partial(update_mem_step, objective=args.objective, residual='residual' in args.objective)
 
         def scan_wrapper(inps, i, f: Callable):
             mem_params, pi_params, mem_tx_params = inps
@@ -247,7 +260,7 @@ def make_experiment(args):
             return (new_mem_params, pi_params, mem_tx_params), (loss, new_mem_params)
 
         scan_tqdm_dec = scan_tqdm(args.mi_steps)
-        update_ld_step = scan_tqdm_dec(partial(scan_wrapper, f=update_ld_step))
+        update_step = scan_tqdm_dec(partial(scan_wrapper, f=update_step))
 
         mem_aug_pi_paramses = new_pi_over_mem(pis_to_learn_mem, args.n_mem_states)
         batch_mem_log_all_measures = augment_and_log_all_measures
@@ -256,12 +269,12 @@ def make_experiment(args):
         # Memory iteration for all of our measures
         print("Starting {} iterations of λ-discrepancy minimization", args.mi_steps)
         after_mem_op_info = {}
-        ld_mem_out, (losses, all_mem_params) = jax.lax.scan(update_ld_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
-        ld_mem_paramses, ld_pi_paramses, _ = ld_mem_out
-        ld_mem_info = {'mems': ld_mem_paramses,
-                       'all_mem_params': all_mem_params[::args.save_mem_freq],
-                       'measures': batch_mem_log_all_measures(ld_mem_paramses, pomdp, ld_pi_paramses)}
-        after_mem_op_info['ld'] = ld_mem_info
+        updated_mem_out, (losses, all_mem_params) = jax.lax.scan(update_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
+        updated_mem_paramses, ld_pi_paramses, _ = updated_mem_out
+        updated_mem_info = {'mems': updated_mem_paramses,
+                            'all_mem_params': all_mem_params[::args.save_mem_freq],
+                            'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_pi_paramses)}
+        after_mem_op_info[args.objective] = updated_mem_info
 
         info['after_mem_op'] = after_mem_op_info
 
@@ -277,7 +290,7 @@ def make_experiment(args):
             return output_pi_tuple, pi_optim_info
 
         # Get our parameters ready for batch policy improvement
-        all_mem_paramses = ld_mem_paramses
+        all_mem_paramses = updated_mem_paramses
 
         # now we do policy improvement over the learnt memory
         # reset pi indices, and mem_augment
@@ -298,8 +311,8 @@ def make_experiment(args):
         ld_improved_pi_params = all_improved_pi_params
 
         final_info = {
-            'ld': {'pi_params': ld_improved_pi_params,
-                   'measures': batch_mem_log_all_measures(ld_mem_paramses, pomdp, ld_improved_pi_params)},
+            args.objective: {'pi_params': ld_improved_pi_params,
+                             'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_improved_pi_params)},
         }
 
         info['final'] = final_info
