@@ -148,13 +148,30 @@ def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP,
     }
 
 
+class MemDataCallback:
+    """Helper callback to keep a reference to the actor being modified."""
+
+    def __init__(self, name: str, color: str, data: np.ndarray):
+        self.name = name
+        self.color = color
+
+        self.data = data
+        self.visibility = True
+        self.actor = None
+
+    def __call__(self, state: bool):
+        self.actor.SetVisibility(state)
+        print(state)
+        self.visibility = state
+
+
 if __name__ == "__main__":
     batch_size = 100
     bins = 30
 
     # we load our memory
     mem_opt_path = Path(
-        '/home/taodav/Documents/grl/results/switching_batch_run_seed(2024)_time(20241106-133112)_a35186d2dbca57ef82d22ed3957b7ef8.npy')
+        '/Users/ruoyutao/Documents/grl/results/switching_batch_run_seed(2024)_time(20241106-135808)_9be879b88548c57cd5fe22dbb19d311a.npy')
 
     res = load_info(mem_opt_path)
     all_mem_params = res['logs']['after_mem_op']['ld']['all_mem_params'][0]  # steps x *mem_size
@@ -193,37 +210,70 @@ if __name__ == "__main__":
     plotter.add_mesh(pi_obs_state_val_cloud, point_size=5, color='yellow',
                      label='pi(o)')
 
+
+    all_mem_vals_info = [
+        MemDataCallback(name='mem_0_mc', color='blue', data=mem_vals_term_removed['mem_0_state_mc_v']),
+        MemDataCallback(name='mem_1_mc', color='cyan', data=mem_vals_term_removed['mem_1_state_mc_v']),
+        MemDataCallback(name='mem_0_td', color='red', data=mem_vals_term_removed['mem_0_state_td_v']),
+        MemDataCallback(name='mem_1_td', color='orange', data=mem_vals_term_removed['mem_1_state_td_v']),
+    ]
+
     def create_mesh(value, widget):
+        size = 50
+        startpos = 12
+
         # use 'value' to adjust the number of points plotted
         idx = int(value)
-        # widget.GetSliderRepresentation().SetValue(idx)  # snap slider to nearest int
-        # widget.GetSliderRepresentation().SetLabelFormat('%.0f')  # format text so it does not display decimal values
-        mem_0_mc_pc = pv.PolyData(mem_vals_term_removed['mem_0_state_mc_v'][idx])
-        plotter.add_mesh(mem_0_mc_pc, color='blue', point_size=5, name='mem_0',
-                         label='pi(s)')
-        mem_1_mc_pc = pv.PolyData(mem_vals_term_removed['mem_1_state_mc_v'][idx])
-        plotter.add_mesh(mem_1_mc_pc, color='cyan', point_size=5, name='mem_1',
-                         label='pi(s)')
+        for d in all_mem_vals_info:
+            pc = pv.PolyData(d.data[idx])
+            actor = plotter.add_mesh(pc, color=d.color, point_size=5, name=d.name)
+            actor.SetVisibility(d.visibility)
+            d.actor = actor
 
-    plotter.add_slider_widget(create_mesh, [0, all_mem_params.shape[0] - 1], value=0, title='Update Number', pass_widget=True)
-    plotter.show()
+            plotter.add_checkbox_button_widget(
+                d,
+                value=d.visibility,
+                position=(5.0, startpos),
+                size=size,
+                border_size=1,
+                color_on=d.color,
+                color_off='grey',
+                background_color='grey',
+            )
+            plotter.add_text(
+                d.name,
+                position=(5 + 60, startpos)
+            )
+            startpos = startpos + size + (size // 10)
+        plotter.render()
+
+    slider_widget = plotter.add_slider_widget(create_mesh, [0, all_mem_params.shape[0] - 1], value=0, title='Update Number', pass_widget=True)
 
 
-    # mem_0_td_pc = pv.PolyData(mem_vals_term_removed['mem_0_state_td_v'])
-    # plotter.add_mesh(mem_0_td_pc, color='red', point_size=8,
-    #                  label='pi(s)')
-    # mem_1_td_pc = pv.PolyData(mem_vals_term_removed['mem_1_state_td_v'])
-    # plotter.add_mesh(mem_1_td_pc, color='orange', point_size=8,
-    #                  label='pi(s)')
-    # pi_obs_state_mc_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_mc_v'])
-    # plotter.add_mesh(pi_obs_state_mc_val_cloud, point_size=6, color='blue',
-    #                  label='pi(o), V_mc')
-    #
-    # pi_obs_state_td_val_cloud = pv.PolyData(vals_term_removed['pi_obs_state_td_v'])
-    # plotter.add_mesh(pi_obs_state_td_val_cloud, point_size=6, color='red',
-    #                  label='pi(o), V_td')
+    # Define the key press callback function
+    def key_callback(key):
+        # Get the current value of the slider
+        current_value = slider_widget.GetRepresentation().GetValue()
 
-    plotter.show_grid(xlabel='start val', ylabel='middle val', zlabel='right val')
+        # Update slider value based on key press
+        if key == 'Right':
+            new_value = min(current_value + 1, all_mem_params.shape[0] - 1)  # Increment with limit
+        elif key == 'Left':
+            new_value = max(current_value - 1, 0)  # Decrement with limit
+        else:
+            return
+
+        # Update the slider position
+        slider_widget.GetRepresentation().SetValue(new_value)
+        create_mesh(new_value, slider_widget)
+
+
+    # Add the key press callback to the plotter
+    plotter.add_key_event("Left", lambda: key_callback("Left"))
+    plotter.add_key_event("Right", lambda: key_callback("Right"))
+
+
+    # plotter.show_grid(xlabel='start val', ylabel='middle val', zlabel='right val')
     plotter.show()
 
     print()
