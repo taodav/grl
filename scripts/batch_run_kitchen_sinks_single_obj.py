@@ -80,6 +80,8 @@ def get_args():
                         help='How many random policies do we use for random kitchen sinks??')
     parser.add_argument('--leave_out_optimal', action='store_true',
                         help="Do we include the optimal policy when we select the initial policy")
+    parser.add_argument('--mem_aug_before_init_pi', action='store_true',
+                        help="Do we augment our memory before selecting the highest LD initial policy?")
     parser.add_argument('--n_mem_states', default=2, type=int,
                         help='for memory_id = 0, how many memory states do we have?')
 
@@ -123,6 +125,13 @@ def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callab
     all_policy_measures, _, _ = batch_measures(policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
 
+def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
+                                mem_params: jnp.ndarray,
+                                pomdp: POMDP):
+    mem_policies = policies.repeat(mem_params.shape[-1], axis=1)
+    batch_measures = jax.vmap(mem_discrep_loss, in_axes=(None, 0, None))
+    all_policy_measures = batch_measures(mem_params, mem_policies, pomdp)
+    return policies[jnp.argmax(all_policy_measures)]
 
 loss_map = {
     'ld': discrep_loss,
@@ -209,7 +218,11 @@ def make_experiment(args):
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
+        if args.mem_aug_before_init_pi:
+            measure_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
+        else:
+            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
+        # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
 
         pis_to_learn_mem = measure_pi_params
 
