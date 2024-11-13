@@ -113,6 +113,7 @@ def get_value_fns(pomdp: POMDP, eval_obs_policy: jnp.ndarray = None, batch_size:
 
 
 def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP,
+                 fixed_pi_params: jnp.ndarray = None,
                  batch_size: int = 128, bins: int = 8):
     n_mem = mem_params.shape[-1]
     assert n_mem == 2
@@ -133,38 +134,63 @@ def get_mem_vals(mem_params: jnp.ndarray, pomdp: POMDP,
     mem_state_mc_v = jnp.matmul(mem_mc_v, obs_to_state_mask)  # S * M
     mem_state_td_v = jnp.matmul(mem_td_v, obs_to_state_mask)  # S * M
 
-    # one_step_mem_state_td_v = mem_aug_pomdp.R + mem_aug_pomdp.gamma * mem_aug_pomdp.T * mem_state_td_v
+    next_mem_action_vals = mem_aug_pomdp.gamma * jnp.einsum('ijk,lk->ijl', mem_aug_pomdp.T, mem_state_td_v)
+    R_sa = (mem_aug_pomdp.T * mem_aug_pomdp.R).sum(axis=-1)
+    pi_state = jnp.einsum('ij,kjl->kil', mem_aug_pomdp.phi, mem_aug_interpolated_pis)
 
-    # TODO: pretty easily convert to n_mem
+    one_step_mem_state_td_q = R_sa[..., None] + next_mem_action_vals
+    one_step_mem_state_td_v = (one_step_mem_state_td_q.T * pi_state).sum(axis=-1)
+
+    # Separate out memory states
     mem_0_state_mc_v = mem_state_mc_v[..., ::2]
     mem_1_state_mc_v = mem_state_mc_v[..., 1::2]
 
     mem_0_state_td_v = mem_state_td_v[..., ::2]
     mem_1_state_td_v = mem_state_td_v[..., 1::2]
-
-
-    return {
+    one_step_mem_0_state_td_v = one_step_mem_state_td_v[..., ::2]
+    one_step_mem_1_state_td_v = one_step_mem_state_td_v[..., 1::2]
+    res = {
         'mem_0_state_mc_v': mem_0_state_mc_v,
         'mem_1_state_mc_v': mem_1_state_mc_v,
         'mem_0_state_td_v': mem_0_state_td_v,
         'mem_1_state_td_v': mem_1_state_td_v,
-        # 'one_step_mem_0_state_td_v': one_step_mem_0_state_td_v,
-        # 'one_step_mem_1_state_td_v': one_step_mem_1_state_td_v,
+        'one_step_mem_0_state_td_v': one_step_mem_0_state_td_v,
+        'one_step_mem_1_state_td_v': one_step_mem_1_state_td_v,
     }
+    if fixed_pi_params is not None:
+        mem_aug_fixed_params = fixed_pi_params.repeat(n_mem, axis=0)
+        mem_state_fixed_pi, mem_mc_fixed_pi, mem_td_fixed_pi, _ = analytical_pe(mem_aug_fixed_params, mem_aug_pomdp)
+        mem_state_mc_v_fixed_pi = jnp.matmul(mem_mc_fixed_pi['v'], obs_to_state_mask)  # S * M
+        mem_state_td_v_fixed_pi = jnp.matmul(mem_td_fixed_pi['v'], obs_to_state_mask)  # S * M
+
+        res['mem_0_state_mc_v_fixed_pi'] = mem_state_mc_v_fixed_pi[::2][None, ...]
+        res['mem_1_state_mc_v_fixed_pi'] = mem_state_mc_v_fixed_pi[1::2][None, ...]
+        res['mem_0_state_td_v_fixed_pi'] = mem_state_td_v_fixed_pi[::2][None, ...]
+        res['mem_1_state_td_v_fixed_pi'] = mem_state_td_v_fixed_pi[1::2][None, ...]
+
+    return res
 
 
 class MemDataCallback:
     """Helper callback to keep a reference to the actor being modified."""
 
-    def __init__(self, name: str, color: str, data: np.ndarray):
+    def __init__(self, name: str, color: str, data: np.ndarray,
+                 pt_size: int = 5,
+                 always_visible: bool = False):
         self.name = name
         self.color = color
 
         self.data = data
         self.visibility = True
+        self.always_visible = always_visible
         self.actor = None
+        self.curr_idx = 0
+        self.pt_size = pt_size
 
     def __call__(self, state: bool):
+        # if self.actor is None:
+        #     pc = pv.PolyData(self.data)
+        #     self.actor = plotter.add_mesh(pc, color=self.color, point_size=5, name=self.name)
         self.actor.SetVisibility(state)
         self.visibility = state
 
@@ -202,7 +228,7 @@ if __name__ == "__main__":
     @scan_tqdm(all_mem_params.shape[0])
     def mem_vals_scan_wrapper(_, inp):
         i, mem_params = inp
-        return _, get_mem_vals(mem_params, pomdp)
+        return _, get_mem_vals(mem_params, pomdp, fixed_pi_params=init_sampled_pi)
 
     _, mem_vals = jax.lax.scan(
         mem_vals_scan_wrapper, None, (jnp.arange(all_mem_params.shape[0]), all_mem_params), all_mem_params.shape[0]
@@ -230,6 +256,14 @@ if __name__ == "__main__":
             MemDataCallback(name='mem_1_mc', color='cyan', data=mem_vals_term_removed['mem_1_state_mc_v']),
             MemDataCallback(name='mem_0_td', color='red', data=mem_vals_term_removed['mem_0_state_td_v']),
             MemDataCallback(name='mem_1_td', color='orange', data=mem_vals_term_removed['mem_1_state_td_v']),
+            MemDataCallback(name='mem_0_mc_init_pi', color='blue', pt_size=10,
+                            data=mem_vals_term_removed['mem_0_state_mc_v_fixed_pi'], always_visible=True),
+            MemDataCallback(name='mem_1_mc_init_pi', color='cyan', pt_size=10,
+                            data=mem_vals_term_removed['mem_1_state_mc_v_fixed_pi'], always_visible=True),
+            MemDataCallback(name='mem_0_td_init_pi', color='red', pt_size=10,
+                            data=mem_vals_term_removed['mem_0_state_td_v_fixed_pi'], always_visible=True),
+            MemDataCallback(name='mem_1_td_init_pi', color='orange', pt_size=10,
+                            data=mem_vals_term_removed['mem_1_state_td_v_fixed_pi'], always_visible=True),
         ]
     elif objective == 'tde':
         all_mem_vals_info = [
@@ -239,6 +273,8 @@ if __name__ == "__main__":
             MemDataCallback(name='mem_1_td', color='orange', data=mem_vals_term_removed['mem_1_state_td_v']),
         ]
 
+    # TODO: What we can do is add_mesh for all time, and just call SetVisibility to False for everything except for current slice.
+
     def create_mesh(value, widget):
         size = 50
         startpos = 12
@@ -247,32 +283,28 @@ if __name__ == "__main__":
         idx = int(value)
         for d in all_mem_vals_info:
             pc = pv.PolyData(d.data[idx])
-            if d.visibility:
-                actor = plotter.add_mesh(pc, color=d.color, point_size=5, name=d.name)
-                # actor.SetVisibility(d.visibility)
+            d.idx = idx
+            if d.visibility or d.always_visible:
+                actor = plotter.add_mesh(pc, color=d.color, point_size=d.pt_size, name=d.name)
                 d.actor = actor
             else:
                 d.actor = None
 
-            # def callback(s):
-            #     actor = plotter.add_mesh(pc, color=d.color, point_size=5, name=d.name)
-            #     d.actor = actor
-            #     d(s)
-
-            plotter.add_checkbox_button_widget(
-                d,
-                value=d.visibility,
-                position=(5.0, startpos),
-                size=size,
-                border_size=1,
-                color_on=d.color,
-                color_off='grey',
-                background_color='grey',
-            )
-            plotter.add_text(
-                d.name,
-                position=(5 + 60, startpos)
-            )
+            if not d.always_visible:
+                plotter.add_checkbox_button_widget(
+                    d,
+                    value=d.visibility,
+                    position=(5.0, startpos),
+                    size=size,
+                    border_size=1,
+                    color_on=d.color,
+                    color_off='grey',
+                    background_color='grey',
+                )
+                plotter.add_text(
+                    d.name,
+                    position=(5 + 60, startpos)
+                )
             startpos = startpos + size + (size // 10)
         # plotter.render()
 
@@ -302,7 +334,7 @@ if __name__ == "__main__":
     plotter.add_key_event("Right", lambda: key_callback("Right"))
 
 
-    # plotter.show_grid(xlabel='start val', ylabel='middle val', zlabel='right val')
+    plotter.show_grid(xlabel='start val', ylabel='middle val', zlabel='right val')
     plotter.show()
 
     print()

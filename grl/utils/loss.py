@@ -526,3 +526,13 @@ def value_error(pi: jnp.ndarray,
     loss = weighted_err.sum()
 
     return loss, state_vals, expanded_obs_vals
+
+
+@partial(jit, static_argnames=['error_type', 'residual'])
+def mem_state_discrep(
+        mem_params: jnp.ndarray,
+        pi: jnp.ndarray,
+        pomdp: POMDP, # non-state args
+        error_type: str = 'l2',
+        lambda_: float = 0.,
+        residual: bool = False): # initialize static args
