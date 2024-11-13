@@ -1,5 +1,5 @@
 """
-This file runs a memory iteration with a batch of randomized initial policies,
+This file runs a memory iteration with a batch of randomized memory-augmented initial policies,
 as well as the TD optimal policy, on a list of different measures.
 
 """
@@ -117,10 +117,16 @@ sweep_hparams = {
 }
 
 
-def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callable):
-    batch_measures = jax.vmap(measure, in_axes=(0, None))
-    all_policy_measures, _, _ = batch_measures(policies, pomdp)
-    return policies[jnp.argmax(all_policy_measures)]
+def get_mem_aug_kitchen_sink_policy(mem_params: jnp.ndarray,
+                                    mem_aug_pis: jnp.ndarray,
+                                    pomdp: POMDP, mem_measure: Callable):
+    # batch_measures = jax.vmap(mem_measure, in_axes=(None, 0, None))
+    # all_policy_measures = batch_measures(mem_params, mem_aug_pis, pomdp)
+    # return mem_aug_pis[jnp.argmax(all_policy_measures)]
+    mem_policies = mem_aug_pis[:, ::mem_params.shape[-1]].repeat(mem_params.shape[-1], axis=1)
+    batch_measures = jax.vmap(mem_measure, in_axes=(None, 0, None))
+    all_policy_measures = batch_measures(mem_params, mem_policies, pomdp)
+    return mem_policies[jnp.argmax(all_policy_measures)]
 
 
 loss_map = {
@@ -154,11 +160,20 @@ def make_experiment(args):
         beginning_info = {}
         rng, pi_rng = random.split(rng)
         mem_aug_pi_shape = (int(pomdp.observation_space.n * args.n_mem_states), pomdp.action_space.n)
+
+        # pi_paramses is args.random_policies x (n_obs * n_mem_states) x n_actions
         pi_paramses = reverse_softmax(get_unif_policies(pi_rng, mem_aug_pi_shape, args.random_policies + 1))
         updateable_pi_params = pi_paramses[-1]
 
+        # We initialize mem params
+        mem_shape = (pomdp.action_space.n, pomdp.observation_space.n, args.n_mem_states, args.n_mem_states)
+        mem_params = random.normal(mem_rng, shape=mem_shape) * 0.5
+
+        init_mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
+
         beginning_info['pi_params'] = pi_paramses.copy()
-        beginning_info['measures'] = batch_log_all_measures(pomdp, pi_paramses)
+        beginning_info['measures'] = batch_log_all_measures(init_mem_aug_pomdp, pi_paramses)
+        beginning_info['init_mem_params'] = mem_params.copy()
         info['beginning'] = beginning_info
 
         optim = get_optimizer(args.optimizer, args.lr)
@@ -181,32 +196,28 @@ def make_experiment(args):
             return outs, {'v0': v_0, 'v': td_v_vals, 'q': td_q_vals}
 
         output_pi_tuple, init_pi_optim_info = jax.lax.scan(update_pg_step,
-                                                           (updateable_pi_params, pi_tx_params, pomdp),
+                                                           (updateable_pi_params, pi_tx_params, init_mem_aug_pomdp),
                                                            jnp.arange(args.pi_steps),
                                                            length=args.pi_steps)
 
-        memoryless_optimal_pi_params, _, _ = output_pi_tuple
+        init_optimal_pi_params, _, _ = output_pi_tuple
 
         after_pi_op_info = {}
-        after_pi_op_info['initial_improvement_pi_params'] = memoryless_optimal_pi_params
-        after_pi_op_info['initial_improvement_measures'] = log_all_measures(pomdp, memoryless_optimal_pi_params)
-        print("Learnt initial improvement policy:\n{}", nn.softmax(memoryless_optimal_pi_params, axis=-1))
+        after_pi_op_info['initial_improvement_pi_params'] = init_optimal_pi_params
+        after_pi_op_info['initial_improvement_measures'] = log_all_measures(init_mem_aug_pomdp, init_optimal_pi_params)
+        print("Learnt initial improvement policy over random mem:\n{}", nn.softmax(init_optimal_pi_params, axis=-1))
 
-        pis_with_memoryless_optimal = pi_paramses.at[-1].set(memoryless_optimal_pi_params)
+        pis_with_init_optimal = pi_paramses.at[-1].set(init_optimal_pi_params)
 
-        after_pi_op_info['all_tested_pi_params'] = pis_with_memoryless_optimal
+        after_pi_op_info['all_tested_pi_params'] = pis_with_init_optimal
         info['after_pi_op'] = after_pi_op_info
 
         if args.leave_out_optimal:
-            pis_with_memoryless_optimal = pi_paramses[:-1]
-
-        # We initialize mem params
-        mem_shape = (pomdp.action_space.n, pomdp.observation_space.n, args.n_mem_states, args.n_mem_states)
-        mem_params = random.normal(mem_rng, shape=mem_shape) * 0.5
+            pis_with_init_optimal = pi_paramses[:-1]
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
+        measure_pi_params = get_mem_aug_kitchen_sink_policy(mem_params, pis_with_init_optimal, pomdp, loss_map[args.objective])
 
         pis_to_learn_mem = measure_pi_params
 
@@ -214,7 +225,6 @@ def make_experiment(args):
 
         mem_tx_params = optim.init(mem_params)
 
-        info['beginning']['init_mem_params'] = mem_params.copy()
         info['after_kitchen_sinks'] = kitchen_sinks_info
 
         # Set up for batch memory iteration
@@ -259,21 +269,20 @@ def make_experiment(args):
         scan_tqdm_dec = scan_tqdm(args.mi_steps)
         update_step = scan_tqdm_dec(partial(scan_wrapper, f=update_step))
 
-        mem_aug_pi_paramses = new_pi_over_mem(pis_to_learn_mem, args.n_mem_states)
-        batch_mem_log_all_measures = augment_and_log_all_measures
+        # mem_aug_pi_paramses = new_pi_over_mem(pis_to_learn_mem, args.n_mem_states)
+        mem_aug_pi_paramses = pis_to_learn_mem
         mem_input_tuple = (mem_params, mem_aug_pi_paramses, mem_tx_params)
 
         # Memory iteration for all of our measures
-        print("Starting {} iterations of λ-discrepancy minimization", args.mi_steps)
-        after_mem_op_info = {}
+        print("Starting {} iterations of {} minimization", args.mi_steps, args.objective)
         updated_mem_out, (losses, all_mem_params) = jax.lax.scan(update_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
-        updated_mem_paramses, ld_pi_paramses, _ = updated_mem_out
-        updated_mem_info = {'mems': updated_mem_paramses,
+        updated_mem_params, updated_mem_pi_params, _ = updated_mem_out
+        updated_mem_aug_pomdp = memory_cross_product(updated_mem_params, pomdp)
+        updated_mem_info = {'mems': updated_mem_params,
                             'all_mem_params': all_mem_params[::args.save_mem_freq],
-                            'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_pi_paramses)}
-        after_mem_op_info[args.objective] = updated_mem_info
+                            'measures': log_all_measures(updated_mem_aug_pomdp, updated_mem_pi_params)}
 
-        info['after_mem_op'] = after_mem_op_info
+        info['after_mem_op'] = updated_mem_info
 
         def cross_and_improve_pi(mem_params: jnp.ndarray,
                                  pi_params: jnp.ndarray,
@@ -286,30 +295,28 @@ def make_experiment(args):
                                                                length=args.pi_steps)
             return output_pi_tuple, pi_optim_info
 
-        # Get our parameters ready for batch policy improvement
-        all_mem_paramses = updated_mem_paramses
-
         # now we do policy improvement over the learnt memory
         # reset pi indices, and mem_augment
         rng, pi_rng = random.split(rng)
-        new_pi_paramses = reverse_softmax(get_unif_policies(pi_rng, pi_shape, 1))[0]
-        mem_aug_pi_paramses = new_pi_paramses.repeat(mem_params.shape[-1], axis=0)
+        new_pi_paramses = reverse_softmax(get_unif_policies(pi_rng, mem_aug_pi_shape, 1))[0]
+        mem_aug_pi_paramses = new_pi_paramses
+        # mem_aug_pi_paramses = new_pi_paramses.repeat(mem_params.shape[-1], axis=0)
 
         # Use the same initial random pi params across all final policy improvements.
         all_mem_aug_pi_params = mem_aug_pi_paramses
         all_mem_pi_tx_paramses = optim.init(all_mem_aug_pi_params)
 
         # Batch policy improvement with PG
-        all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(all_mem_paramses, all_mem_aug_pi_params,
+        all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(updated_mem_params, all_mem_aug_pi_params,
                                                                            all_mem_pi_tx_paramses)
 
         # Retrieve each set of learned pi params
         all_improved_pi_params, _, _ = all_improved_pi_tuple
-        ld_improved_pi_params = all_improved_pi_params
+        mem_improved_pi_params = all_improved_pi_params
 
         final_info = {
-            args.objective: {'pi_params': ld_improved_pi_params,
-                             'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_improved_pi_params)},
+            'improved_mem': {'pi_params': mem_improved_pi_params,
+                             'measures': log_all_measures(updated_mem_aug_pomdp, mem_improved_pi_params)},
         }
 
         info['final'] = final_info
@@ -349,6 +356,16 @@ if __name__ == "__main__":
     end_time = time()
     run_stats = {'start_time': start_time, 'end_time': end_time}
     info['run_stats'] = run_stats
+
+    def perf_from_stats(stats: dict) -> float:
+        return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1).mean().item()
+
+    print("Finished Memory Iteration.")
+    print(f"Average performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values']):.4f}")
+    print(
+        f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values']):.4f}"
+    )
+    print(f"Final performance after MI: {perf_from_stats(outs['final']['improved_mem']['measures']['values']):.4f}")
 
     print(f"Saving results to {results_path}")
     numpyify_and_save(results_path, info)

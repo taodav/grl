@@ -353,5 +353,14 @@ if __name__ == "__main__":
     run_stats = {'start_time': start_time, 'end_time': end_time}
     info['run_stats'] = run_stats
 
+    def perf_from_stats(stats: dict) -> float:
+        return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1).mean().item()
+
+    print("Finished Memory Iteration.")
+    print(f"Average performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values']):.4f}")
+    print(
+        f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values']):.4f}"
+    )
+    print(f"Final performance after MI: {perf_from_stats(outs['final'][args.objective]['measures']['values']):.4f}")
     print(f"Saving results to {results_path}")
     numpyify_and_save(results_path, info)

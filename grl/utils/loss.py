@@ -536,3 +536,4 @@ def mem_state_discrep(
         error_type: str = 'l2',
         lambda_: float = 0.,
         residual: bool = False): # initialize static args
+    pass
