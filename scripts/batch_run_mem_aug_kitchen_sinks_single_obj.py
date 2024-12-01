@@ -88,7 +88,8 @@ def get_args():
 
     parser.add_argument('--alpha', default=1., type=float,
                         help='Temperature parameter, for how uniform our lambda-discrep weighting is')
-    parser.add_argument('--lr', default=0.01, type=float)
+    parser.add_argument('--pi_lr', default=0.01, type=float)
+    parser.add_argument('--mi_lr', default=0.01, type=float)
     parser.add_argument('--value_type', default='q', type=str,
                         help='Do we use (v | q) for our discrepancies?')
     parser.add_argument('--error_type', default='l2', type=str,
@@ -110,11 +111,6 @@ def get_args():
 
     args = parser.parse_args()
     return args
-
-sweep_hparams = {
-    'alpha': 1,
-    'lr': 0.01,
-}
 
 
 def get_mem_aug_kitchen_sink_policy(mem_params: jnp.ndarray,
@@ -147,6 +143,7 @@ def make_experiment(args):
                                 discount=args.tmaze_discount,
                                 junction_up_pi=args.tmaze_junction_up_pi)
 
+    objective = args.objective
 
 
     def experiment(rng: random.PRNGKey):
@@ -176,9 +173,10 @@ def make_experiment(args):
         beginning_info['init_mem_params'] = mem_params.copy()
         info['beginning'] = beginning_info
 
-        optim = get_optimizer(args.optimizer, args.lr)
+        pi_optim = get_optimizer(args.optimizer, args.pi_lr)
+        mi_optim = get_optimizer(args.optimizer, args.mi_lr)
 
-        pi_tx_params = optim.init(updateable_pi_params)
+        pi_tx_params = pi_optim.init(updateable_pi_params)
 
         print("Running initial policy improvement")
         @scan_tqdm(args.pi_steps)
@@ -190,7 +188,7 @@ def make_experiment(args):
             # We add a negative here to params_grad b/c we're trying to
             # maximize the PG objective (value of start state).
             params_grad = -params_grad
-            updates, tx_params = optim.update(params_grad, tx_params, params)
+            updates, tx_params = pi_optim.update(params_grad, tx_params, params)
             params = optax.apply_updates(params, updates)
             outs = (params, tx_params, pomdp)
             return outs, {'v0': v_0, 'v': td_v_vals, 'q': td_q_vals}
@@ -217,13 +215,13 @@ def make_experiment(args):
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        measure_pi_params = get_mem_aug_kitchen_sink_policy(mem_params, pis_with_init_optimal, pomdp, loss_map[args.objective])
+        measure_pi_params = get_mem_aug_kitchen_sink_policy(mem_params, pis_with_init_optimal, pomdp, loss_map[objective])
 
         pis_to_learn_mem = measure_pi_params
 
-        kitchen_sinks_info[args.objective] = measure_pi_params.copy()
+        kitchen_sinks_info[objective] = measure_pi_params.copy()
 
-        mem_tx_params = optim.init(mem_params)
+        mem_tx_params = mi_optim.init(mem_params)
 
         info['after_kitchen_sinks'] = kitchen_sinks_info
 
@@ -253,13 +251,13 @@ def make_experiment(args):
             pi = jax.nn.softmax(pi_params, axis=-1)
             loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
 
-            updates, mem_tx_params = optim.update(params_grad, mem_tx_params, mem_params)
+            updates, mem_tx_params = mi_optim.update(params_grad, mem_tx_params, mem_params)
             new_mem_params = optax.apply_updates(mem_params, updates)
 
             return new_mem_params, pi_params, mem_tx_params, loss
 
         # Make our vmapped memory function
-        update_step = partial(update_mem_step, objective=args.objective, residual='residual' in args.objective)
+        update_step = partial(update_mem_step, objective=objective, residual='residual' in objective)
 
         def scan_wrapper(inps, i, f: Callable):
             mem_params, pi_params, mem_tx_params = inps
@@ -274,7 +272,7 @@ def make_experiment(args):
         mem_input_tuple = (mem_params, mem_aug_pi_paramses, mem_tx_params)
 
         # Memory iteration for all of our measures
-        print("Starting {} iterations of {} minimization", args.mi_steps, args.objective)
+        print("Starting {} iterations of memory improvement", args.mi_steps)
         updated_mem_out, (losses, all_mem_params) = jax.lax.scan(update_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
         updated_mem_params, updated_mem_pi_params, _ = updated_mem_out
         updated_mem_aug_pomdp = memory_cross_product(updated_mem_params, pomdp)
@@ -304,7 +302,7 @@ def make_experiment(args):
 
         # Use the same initial random pi params across all final policy improvements.
         all_mem_aug_pi_params = mem_aug_pi_paramses
-        all_mem_pi_tx_paramses = optim.init(all_mem_aug_pi_params)
+        all_mem_pi_tx_paramses = pi_optim.init(all_mem_aug_pi_params)
 
         # Batch policy improvement with PG
         all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(updated_mem_params, all_mem_aug_pi_params,
@@ -350,7 +348,7 @@ if __name__ == "__main__":
 
     time_finish = time()
 
-    results_path = results_path(args, entry_point='batch_run')
+    results_path = results_path(args, entry_point=args.objective)
     info = {'logs': outs, 'args': args.__dict__}
 
     end_time = time()
