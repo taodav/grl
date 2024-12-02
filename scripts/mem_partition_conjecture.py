@@ -3,7 +3,9 @@ import jax
 import jax.numpy as jnp
 
 from grl.environment import load_pomdp
+from grl.memory import memory_cross_product
 from grl.utils import reverse_softmax
+from grl.utils.policy_eval import lstdq_lambda
 
 
 def switching_optimal_deterministic_1_bit_mem():
@@ -55,6 +57,7 @@ def epsilon_interpolate_deterministic_dist(deterministic_dist: jnp.ndarray, eps:
 
 if __name__ == "__main__":
     seed = 2024
+    lambda_ = 0.
     rng = jax.random.PRNGKey(seed)
 
     # load environment
@@ -70,5 +73,13 @@ if __name__ == "__main__":
 
     # TODO: vmap this!
     epsilon = 0.1
+    eps_mem_fn = epsilon_interpolate_deterministic_dist(mem_fn, epsilon)
+    eps_mem_params = reverse_softmax(eps_mem_fn)
 
+    eps_mem_aug_pomdp = memory_cross_product(eps_mem_params, pomdp)
+    mem_aug_pi_params = pi_params.repeat(eps_mem_params.shape[-1], axis=0)
+    mem_aug_pi = jax.nn.softmax(mem_aug_pi_params, axis=-1)
 
+    lambda_v_vals, lambda_q_vals, _ = lstdq_lambda(pi, pomdp, lambda_=lambda_)
+
+    eps_mem_lambda_v_vals, eps_mem_lambda_q_vals, _ = lstdq_lambda(mem_aug_pi, eps_mem_aug_pomdp, lambda_=lambda_)
