@@ -1,5 +1,6 @@
 from itertools import product
 
+import jax.numpy as jnp
 import numpy as np
 from tqdm import tqdm
 
@@ -479,3 +480,35 @@ mem_18 = np.array([
 memory_18 = np.array([mem_18, mem_18, mem_18, mem_18]) # up, down, right, left
 
 memory_19 = np.zeros_like(memory_18) + 1 / memory_18.shape[-1]
+
+
+def switching_optimal_deterministic_1_bit_mem():
+    mem_fn = jnp.array([
+        # action: right
+        [
+            # obs: start
+            [[0., 1.],
+             [0., 1.]],
+            # obs: middle
+            [[1., 0.],
+             [1., 0.]],
+            # obs: terminal
+            [[1., 0.],
+             [0., 1.]],
+        ],
+        # action: left
+        [
+            # obs: start
+            [[1., 0.],
+             [0., 1.]],
+            # obs: middle
+            [[0., 1.],
+             [1., 0.]],
+            # obs: terminal
+            [[1., 0.],
+             [0., 1.]]
+        ]
+    ])
+    return mem_fn  # A(2) x O(3) x M(2) x M(2)
+
+
