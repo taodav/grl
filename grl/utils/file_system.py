@@ -27,6 +27,13 @@ def results_path(args: Namespace,
     results_path = results_dir / fname
     return results_path
 
+
+def numpyify(leaf):
+    if isinstance(leaf, jnp.ndarray):
+        return np.array(leaf)
+    return leaf
+
+
 def numpyify_dict(info: Union[dict, jnp.ndarray, np.ndarray, list, tuple]):
     """
     Converts all jax.numpy arrays to numpy arrays in a nested dictionary.

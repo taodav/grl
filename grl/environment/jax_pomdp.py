@@ -13,6 +13,7 @@ class POMDP(environment.Environment):
                  p0: jnp.ndarray,
                  gamma: float,
                  phi: jnp.ndarray,
+                 one_hot: bool = False,
                  fully_observable: bool = False):
         self.gamma = jnp.array(gamma)
         self.T = jnp.array(T)
@@ -21,11 +22,15 @@ class POMDP(environment.Environment):
 
         self.p0 = jnp.array(p0)
         self.fully_observable = fully_observable
+        self.one_hot = one_hot
 
     def observation_space(self, params: environment.EnvParams):
         if self.fully_observable:
             return spaces.Box(0, 1, (self.T.shape[-1],))
-        return spaces.Box(0, 1, (self.phi.shape[-1],))
+        elif self.one_hot:
+            return spaces.Box(0, 1, (self.phi.shape[-1],))
+        else:
+            return spaces.Discrete(self.phi.shape[-1])
 
     def action_space(self, params: environment.EnvParams):
         return spaces.Discrete(self.T.shape[0])
@@ -44,8 +49,12 @@ class POMDP(environment.Environment):
         n_obs = self.phi[s].shape[0]
 
         observed_idx = random.choice(key, n_obs, p=self.phi[s])
-        obs = jnp.zeros(n_obs)
-        obs = obs.at[observed_idx].set(1)
+        if self.one_hot:
+            obs = jnp.zeros(n_obs)
+            obs = obs.at[observed_idx].set(1)
+        else:
+            obs = observed_idx
+
         return obs
 
     @partial(jit, static_argnums=(0, ))
