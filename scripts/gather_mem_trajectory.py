@@ -139,8 +139,8 @@ if __name__ == '__main__':
     # jax.disable_jit(True)
     env_str = 'switching'
     seed = 2024
-    # n_samples = int(1e6)
     n_samples = int(1e6)
+
     res_dir = Path(ROOT_DIR, 'results', f'{env_str}_returns_dataset')
 
     rng = jax.random.PRNGKey(seed)
@@ -156,22 +156,28 @@ if __name__ == '__main__':
 
     epsilons = jnp.linspace(0, 0.5, num=32)
 
-    # TODO: vmap this!
-    epsilon = 0.1
-    eps_mem_fn = epsilon_interpolate_deterministic_dist(mem_fn, epsilon)
-    eps_mem_params = reverse_softmax(eps_mem_fn)
+    def run_single_epsilon(epsilon, rng):
+        eps_mem_fn = epsilon_interpolate_deterministic_dist(mem_fn, epsilon)
+        eps_mem_params = reverse_softmax(eps_mem_fn)
 
-    mem_aug_pi_params = pi_params.repeat(eps_mem_params.shape[-1], axis=0)
-    mem_aug_pi = jax.nn.softmax(mem_aug_pi_params, axis=-1)
+        mem_aug_pi_params = pi_params.repeat(eps_mem_params.shape[-1], axis=0)
+        mem_aug_pi = jax.nn.softmax(mem_aug_pi_params, axis=-1)
 
-    runner_fn = jax.jit(make_runner(env, mem_aug_pi, n_samples))
+        runner_fn = jax.jit(make_runner(env, mem_aug_pi, n_samples))
 
+        rng, _rng = jax.random.split(rng)
+        dataset, returns = runner_fn(_rng, eps_mem_params)
+        res = {
+            'dataset': dataset,
+            'returns': returns
+        }
+        return res
+
+    vmap_runner_fn = jax.vmap(run_single_epsilon, in_axes=0)
     rng, _rng = jax.random.split(rng)
-    dataset, returns = runner_fn(_rng, eps_mem_params)
-    res = {
-        'dataset': dataset,
-        'returns': returns
-    }
+    _rngs = jax.random.split(rng, epsilons.shape[0])
+
+    res = vmap_runner_fn(epsilons, _rngs)
 
     res = jax.tree.map(numpyify, res)
 
