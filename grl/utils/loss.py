@@ -100,16 +100,16 @@ def discrep_loss(
         lambda_1: float = 1.,
         alpha: float = 1.,
         flip_count_prob: bool = False): # initialize static args
-    if lambda_0 == 0. and lambda_1 == 1.:
-        _, mc_vals, td_vals, info = analytical_pe(pi, pomdp)
-        lambda_0_vals = td_vals
-        lambda_1_vals = mc_vals
-    else:
-        # TODO: info here only contains state occupancy, which should lambda agnostic.
-        lambda_0_v_vals, lambda_0_q_vals, _ = lstdq_lambda(pi, pomdp, lambda_=lambda_0)
-        lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi, pomdp, lambda_=lambda_1)
-        lambda_0_vals = {'v': lambda_0_v_vals, 'q': lambda_0_q_vals}
-        lambda_1_vals = {'v': lambda_1_v_vals, 'q': lambda_1_q_vals}
+    # if lambda_0 == 0. and lambda_1 == 1.:
+    #     _, mc_vals, td_vals, info = analytical_pe(pi, pomdp)
+    #     lambda_0_vals = td_vals
+    #     lambda_1_vals = mc_vals
+    # else:
+    # TODO: info here only contains state occupancy, which should lambda agnostic.
+    lambda_0_v_vals, lambda_0_q_vals, _ = lstdq_lambda(pi, pomdp, lambda_=lambda_0)
+    lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi, pomdp, lambda_=lambda_1)
+    lambda_0_vals = {'v': lambda_0_v_vals, 'q': lambda_0_q_vals}
+    lambda_1_vals = {'v': lambda_1_v_vals, 'q': lambda_1_q_vals}
 
     diff = lambda_1_vals[value_type] - lambda_0_vals[value_type]
     c_s = info['occupancy'] * (1 - pomdp.terminal_mask)
