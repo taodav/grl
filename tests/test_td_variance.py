@@ -7,6 +7,7 @@ from jax import random
 
 from grl.environment.jax_pomdp import load_jax_pomdp, POMDP
 from grl.environment.policy_lib import switching_two_thirds_right_policy
+from grl.utils.data import one_hot
 
 from scripts.td_variance import get_variances
 
@@ -127,7 +128,7 @@ if __name__ == "__main__":
 
     pomdp = load_jax_pomdp(env_str)
 
-    collect_fn = make_collect_samples(env_str, pomdp)
+    collect_fn = make_collect_samples(env_str, pomdp, n_samples=1000)
 
     collect_rng, rng = jax.random.split(rng)
 
@@ -136,6 +137,18 @@ if __name__ == "__main__":
     # TODO: calc variance over...
     # State, observation (MC), observation (TD). Will probably have to run TD model separately
     # vars_o
+    states = experiences['state']
+    one_hot_states = jnp.zeros((states.shape[0], pomdp.T.shape[-1]))
+    one_hot_states = one_hot_states.at[jnp.arange(states.shape[0]), states].set(1)
+
+    returns = experiences['g']
+    squared_returns = returns**2
+
+    obs_returns = returns[..., None] * experiences['obs']
+    state_returns = returns[..., None] * one_hot_states
+
+    obs_squared_returns = squared_returns[..., None] * experiences['obs']
+    state_squared_returns = squared_returns[..., None] * one_hot_states
 
     variances = get_variances(info['pi'], pomdp)
 
