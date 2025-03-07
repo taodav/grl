@@ -20,6 +20,9 @@ class GymnaxWrapper(object):
         else:
             self._unwrapped = env
 
+    @property
+    def unwrapped(self):
+        return self._unwrapped
     # provide proxy access to regular attributes of wrapped object
     def __getattr__(self, name):
         return getattr(self._env, name)

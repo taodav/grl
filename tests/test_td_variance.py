@@ -4,10 +4,11 @@ import chex
 import jax
 import jax.numpy as jnp
 from jax import random
+import numpy as np
 
-from grl.environment.jax_pomdp import load_jax_pomdp, POMDP
+from grl.environment import load_pomdp
+from grl.environment.jax_pomdp import load_jax_pomdp, POMDP, LogWrapper, VecEnv
 from grl.environment.policy_lib import switching_two_thirds_right_policy
-from grl.utils.data import one_hot
 
 from scripts.td_variance import get_variances
 
@@ -39,6 +40,9 @@ def make_collect_samples(env_str: str, env: POMDP,
         if env_str == 'tmaze_5_two_thirds_up':
             pi_arr = jnp.array([[0, 0, 1, 0], [0, 0, 1, 0], [0, 0, 1, 0], [2 / 3, 1 / 3, 0, 0], [1, 0, 0, 0]])
             return partial(tabular_policy, pi_arr=pi_arr, epsilon=epsilon), pi_arr
+        elif env_str == 'tmaze_5_separate_goals_two_thirds_up':
+            pi_arr = jnp.array([[0, 0, 1, 0], [0, 0, 1, 0], [0, 0, 1, 0], [2 / 3, 1 / 3, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
+            return partial(tabular_policy, pi_arr=pi_arr, epsilon=epsilon), pi_arr
         elif env_str == 'parity_check_two_thirds_up':
             pi_arr = jnp.array([
                         [0, 0, 1, 0],
@@ -61,6 +65,7 @@ def make_collect_samples(env_str: str, env: POMDP,
 
     def env_step(runner_state, step):
         env_state, last_obs, last_done, rng = runner_state
+        state = env_state.env_state
 
         policy_rng, env_rng, rng = jax.random.split(rng, 3)
 
@@ -74,7 +79,7 @@ def make_collect_samples(env_str: str, env: POMDP,
             'action': action,
             'reward': reward,
             'done': done,
-            'state': env_state.env_state
+            'state': state
         }
         runner_state = (env_state, obs, done, rng)
 
@@ -103,14 +108,17 @@ def make_collect_samples(env_str: str, env: POMDP,
             done, reward = experiences['done'][idx], experiences['reward'][idx]
             g = reward
             g += (1 - done) * pomdp.gamma * next_return
-            return g, g
+            r_2 = (reward ** 2) + 2 * (1 - done) * pomdp.gamma * reward * next_return
+            return g, (g, r_2)
 
         init_runner_state = 0
 
-        _, disc_returns = jax.lax.scan(
+        _, (disc_returns, r_2) = jax.lax.scan(
             get_disc_returns, init_runner_state, jnp.flip(jnp.arange(n_samples)), n_samples
         )
         experiences['g'] = jnp.flip(disc_returns)
+        experiences['r_2'] = jnp.flip(r_2)
+        # experiences['g'] = disc_returns
         info = {
             'pi': pi
         }
@@ -120,35 +128,85 @@ def make_collect_samples(env_str: str, env: POMDP,
 
 if __name__ == "__main__":
     # jax.disable_jit(True)
-    env_str = 'tmaze_5_two_thirds_up'
+    env_str = 'tmaze_5_separate_goals_two_thirds_up'
     # env_str = 'counting_wall'
     # env_str = 'switching'
 
+    n_samples = int(1e6)
+
     rng = jax.random.PRNGKey(2024)
 
+    # Load POMDPs
     pomdp = load_jax_pomdp(env_str)
 
-    collect_fn = make_collect_samples(env_str, pomdp, n_samples=1000)
+    # collect_fn = make_collect_samples(env_str, pomdp, n_samples=int(1e7))
+    collect_fn = make_collect_samples(env_str, pomdp, n_samples=n_samples)
 
     collect_rng, rng = jax.random.split(rng)
 
-    experiences, info = collect_fn(collect_rng)
+    mc_experiences, info = collect_fn(collect_rng)
 
-    # TODO: calc variance over...
-    # State, observation (MC), observation (TD). Will probably have to run TD model separately
-    # vars_o
-    states = experiences['state']
-    one_hot_states = jnp.zeros((states.shape[0], pomdp.T.shape[-1]))
-    one_hot_states = one_hot_states.at[jnp.arange(states.shape[0]), states].set(1)
+    def calc_vars_from_experience(experiences, pomdp):
+        states = experiences['state']
+        one_hot_states = jnp.zeros((states.shape[0], pomdp.T.shape[-1]))
+        one_hot_states = one_hot_states.at[jnp.arange(states.shape[0]), states].set(1)
+        one_hot_obs = experiences['obs']
 
-    returns = experiences['g']
-    squared_returns = returns**2
+        returns = experiences['g']
+        squared_returns = returns**2
 
-    obs_returns = returns[..., None] * experiences['obs']
-    state_returns = returns[..., None] * one_hot_states
+        all_one_hot_obs_returns = returns[..., None] * experiences['obs']
+        all_one_hot_state_returns = returns[..., None] * one_hot_states
+        all_one_hot_state_r_2 = experiences['r_2'][..., None] * one_hot_states
 
-    obs_squared_returns = squared_returns[..., None] * experiences['obs']
-    state_squared_returns = squared_returns[..., None] * one_hot_states
+        def one_hots_to_counts(one_hots: jnp.ndarray, axis: int = 0):
+            counts = one_hots.sum(axis=axis)
+            counts += (counts == 0)
+            return counts
 
-    variances = get_variances(info['pi'], pomdp)
+        obs_counts = one_hots_to_counts(one_hot_obs)
+        state_counts = one_hots_to_counts(one_hot_states)
+
+        obs_squared_returns = squared_returns[..., None] * one_hot_obs
+        state_squared_returns = squared_returns[..., None] * one_hot_states
+
+        state_returns = all_one_hot_state_returns.sum(axis=0) / state_counts
+        obs_returns = all_one_hot_obs_returns.sum(axis=0) / obs_counts
+        state_r_2 = all_one_hot_state_r_2.sum(axis=0) / state_counts
+
+        state_sampled_var = (one_hot_states * ((all_one_hot_state_returns - state_returns[None, ...]) ** 2)).sum(axis=0) / state_counts
+        obs_sampled_var = (one_hot_obs * ((all_one_hot_obs_returns - obs_returns[None, ...]) ** 2)).sum(axis=0) / obs_counts
+
+        state_second_moment = state_squared_returns.sum(axis=0) / state_counts
+        obs_second_moment = obs_squared_returns.sum(axis=0) / obs_counts
+        results = {
+            'state_r_2': state_r_2,
+            'obs_sampled_var': obs_sampled_var,
+            'obs_second_moment': obs_second_moment,
+            'state_sampled_var': state_sampled_var,
+            'state_second_moment': state_second_moment,
+        }
+        return results
+
+    mc_var_results = calc_vars_from_experience(mc_experiences, pomdp)
+
+    pomdp, pi_dict = load_pomdp(env_str,
+                                corridor_length=5,
+                                discount=0.)
+    variances, info = get_variances(info['pi'], pomdp)
+
+    td_mdp_spec = info['td_model']
+    td_mdp = POMDP(td_mdp_spec.T, td_mdp_spec.R, td_mdp_spec.p0, td_mdp_spec.gamma,
+                   np.eye(td_mdp_spec.state_space.n))
+    td_env = LogWrapper(td_mdp, gamma=td_mdp.gamma)
+    td_env = VecEnv(td_env)
+
+    collect_td_fn = make_collect_samples(env_str, td_env, n_samples=n_samples)
+
+    collect_rng, rng = jax.random.split(rng)
+
+    td_experiences, td_info = collect_td_fn(collect_rng)
+    td_var_results = calc_vars_from_experience(td_experiences, td_env)
+
+    print()
 

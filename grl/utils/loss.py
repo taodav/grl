@@ -1,9 +1,10 @@
-import jax.numpy as jnp
-from jax import nn, lax, jit
+from typing import Union
 from functools import partial
 
+import jax.numpy as jnp
+from jax import nn, lax, jit
+
 from grl.utils.policy import deconstruct_aug_policy
-from grl.utils.math import reverse_softmax
 from grl.utils.mdp import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
 from grl.utils.policy_eval import analytical_pe, lstdq_lambda, functional_solve_mdp
 from grl.utils.augmented_policy import construct_aug_policy, deconstruct_aug_policy
@@ -580,3 +581,63 @@ def mem_state_discrep(
     # the different values of the mem states
     loss = -weighted_err.sum()
     return loss
+
+
+def mem_variance_loss(
+        mem_params: jnp.ndarray,
+        pi: jnp.ndarray,
+        pomdp: POMDP, # input non-static arrays
+        value_type: str = 'q',
+        error_type: str = 'l2',
+        lambda_0: float = 0,
+        lambda_1: float = 1.,  # NOT CURRENTLY USED!
+        residual: bool = False,
+        alpha: float = 1.,
+        flip_count_prob: bool = False):
+    mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
+    loss, _, _ = mstd_err(pi,
+                          mem_aug_pomdp,
+                          # value_type,
+                          error_type,
+                          # alpha,
+                          lambda_=lambda_0,
+                          residual=residual,
+                          # flip_count_prob=flip_count_prob
+                          )
+    return loss
+
+
+def value_second_moment(pi: jnp.ndarray, mdp: Union[POMDP, MDP]):
+    Pi_pi = pi.transpose()[..., None]
+    T_pi = (Pi_pi * mdp.T).sum(axis=0) # T^π(s'|s)
+
+    # First solve for values.
+    # Taken from functional_solve_mdp
+    v_pi_s, q_pi_s = functional_solve_mdp(pi, mdp)
+
+    R_pi_s_s = (Pi_pi * mdp.R).sum(axis=0) # S x S
+
+    R_pi_s_s_squared = (Pi_pi * (mdp.R ** 2)).sum(axis=0)
+
+    R_v_s_prime = R_pi_s_s * v_pi_s[None, ...]
+    R_2_pi_s_over_s_prime = T_pi * (R_pi_s_s_squared + 2 * mdp.gamma * R_v_s_prime)
+    R_2_pi_s = R_2_pi_s_over_s_prime.sum(axis=-1)
+
+    # A*V^{(2)}_pi(s) = b
+    # A = (I - \gamma^2 (T_π))
+    # b = R^{(2)}_π
+    A = (jnp.eye(mdp.state_space.n) - (mdp.gamma ** 2) * T_pi)
+    b = R_2_pi_s
+    V_2_pi_s = jnp.linalg.solve(A, b)  # Second moment of V over state
+
+    # TODO: add Q_2
+    return V_2_pi_s, {'v': v_pi_s, 'q': q_pi_s}
+
+@partial(jit, static_argnames=['error_type', 'residual'])
+def var_err(
+        pi: jnp.ndarray,
+        pomdp: POMDP, # non-state args
+        error_type: str = 'l2',
+        lambda_: float = 0.,
+        residual: bool = False): # initialize static args
+    pass

@@ -481,6 +481,36 @@ memory_18 = np.array([mem_18, mem_18, mem_18, mem_18]) # up, down, right, left
 
 memory_19 = np.zeros_like(memory_18) + 1 / memory_18.shape[-1]
 
+# Optimal memory for t-maze two goals
+mem_20 = np.array([
+    [ # we see the goal as UP
+        # Pr(m'| m, o)
+        # m0', m1'
+        [1., 0], # m0
+        [1, 0], # m1
+    ],
+    [ # we see the goal as DOWN
+        [0, 1],
+        [0, 1],
+    ],
+    [ # corridor
+        [0, 1],
+        [1, 0],
+    ],
+    [ # junction
+        [1, 0],
+        [0, 1],
+    ],
+    [ # goal
+        [1, 0],
+        [0, 1],
+    ],
+    [  # terminal
+        [1, 0],
+        [0, 1],
+    ],
+])
+memory_20 = np.array([mem_20, mem_20, mem_20, mem_20]) # up, down, right, left
 
 def switching_optimal_deterministic_1_bit_mem():
     mem_fn = jnp.array([
@@ -512,3 +542,57 @@ def switching_optimal_deterministic_1_bit_mem():
     return mem_fn  # A(2) x O(3) x M(2) x M(2)
 
 
+def counting_walls_1_bit_mem():
+    mem_fn = jnp.array([
+        [  # UP
+            [[1.,     0.],
+             [0.9983, 0.0017]],
+
+            [[0.0005, 0.9995],
+             [0.1416, 0.8584]],
+
+            [[1.,     0.],
+             [1.,     0.]],
+
+            [[0.0004, 0.9996],
+             [0.0002, 0.9998]],
+
+            [[0.357,  0.643],
+             [0.3058, 0.6942]]
+        ],
+
+        [  # DOWN
+            [[0.0004, 0.9996],
+             [0.001,  0.999]],
+
+            [[0.9999, 0.0001],
+             [0.6126, 0.3874]],
+
+            [[0.0004, 0.9996],
+             [0.1534, 0.8466]],
+
+            [[0.9999, 0.0001],
+             [0.9999, 0.0001]],
+
+            [[0.3914, 0.6086],
+             [0.1711, 0.8289]]
+        ],
+
+        [
+            [[1.,     0.],
+             [0.9968, 0.0032]],
+
+            [[0.0001, 0.9999],
+             [0.0545, 0.9455]],
+
+            [[0.0172, 0.9828],
+             [0.7264, 0.2736]],
+
+            [[0.9992, 0.0008],
+             [0.9992, 0.0008]],
+
+            [[0.5672, 0.4328],
+             [0.7454, 0.2546]]
+        ]
+    ])
+    return mem_fn

@@ -7,7 +7,7 @@ from grl.utils.mdp import to_dict
 
 from definitions import ROOT_DIR
 
-from .tmaze import tmaze, slippery_tmaze, four_tmaze, fixed_four_tmaze
+from .tmaze import tmaze, slippery_tmaze, four_tmaze, fixed_four_tmaze, tmaze_two_goals
 from .compass_world import compass_world
 
 """
@@ -1069,3 +1069,16 @@ def compass_random():
         np.ones((5, 3)) / 3
     ]
     return to_dict(*compass_world(3), Pi_phi)
+
+
+def tmaze_5_separate_goals_two_thirds_up():
+    # n_obs x n_actions
+    n = 5
+    discount = 0.9
+    Pi_phi = [
+        np.array([[0, 0, 1, 0], [0, 0, 1, 0], [0, 0, 1, 0], [2 / 3, 1 / 3, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
+    ]
+
+    # memory policy is observations * memory bits (2) x n_actions
+    Pi_phi_x = [Pi_phi[0].repeat(2, axis=0)]
+    return to_dict(*tmaze_two_goals(n, discount=discount), Pi_phi, Pi_phi_x)

@@ -1,14 +1,21 @@
 from typing import Union
 
+import jax
 from jax import jit
 import jax.numpy as jnp
+import numpy as np
 
 from grl.environment import load_pomdp
+from grl.utils.math import reverse_softmax
+from grl.memory import memory_cross_product
+from grl.memory.lib import counting_walls_1_bit_mem, switching_optimal_deterministic_1_bit_mem
+from grl.memory.lib import memory_18 as tmaze_optimal_mem
+from grl.memory.lib import memory_20 as tmaze_two_goals_optimal_mem
 from grl.mdp import MDP, POMDP
 from grl.utils.mdp import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
 from grl.utils.policy_eval import functional_solve_mdp
 
-from grl.environment.policy_lib import switching_two_thirds_right_policy
+from grl.environment.policy_lib import switching_two_thirds_right_policy, counting_wall_optimal_memoryless_policy
 
 
 # @jit
@@ -32,7 +39,7 @@ def value_second_moment(pi: jnp.ndarray, mdp: Union[POMDP, MDP]):
 
     R_pi_s_s = (Pi_pi * mdp.R).sum(axis=0) # S x S
 
-    R_pi_s_s_squared = R_pi_s_s ** 2
+    R_pi_s_s_squared = (Pi_pi * (mdp.R ** 2)).sum(axis=0)
 
     R_v_s_prime = R_pi_s_s * v_pi_s[None, ...]
     R_2_pi_s_over_s_prime = T_pi * (R_pi_s_s_squared + 2 * mdp.gamma * R_v_s_prime)
@@ -79,11 +86,22 @@ def get_variances(pi: jnp.ndarray, pomdp: POMDP):
         'mc': var_pi_o_mc,
         'state': var_pi_s
     }
-    return variances
+    values = {
+        'state': state_values,
+        'mc': V_pi_o_mc,
+        'td': obs_td_values
+    }
+    info = {
+        'values': values,
+        'td_model': td_model
+    }
+    return variances, info
+
 
 if __name__ == "__main__":
     # env_str = 'tmaze_5_two_thirds_up'
-    env_str = 'counting_wall'
+    env_str = 'tmaze_5_separate_goals_two_thirds_up'
+    # env_str = 'counting_wall'
     # env_str = 'switching'
 
     pomdp, pi_dict = load_pomdp(env_str,
@@ -93,10 +111,40 @@ if __name__ == "__main__":
     # This is state-based variance
     if env_str == 'switching':
         pi = switching_two_thirds_right_policy()
+        mem_fn = switching_optimal_deterministic_1_bit_mem()
     elif env_str == 'counting_wall':
-        raise NotImplementedError
+        pi = counting_wall_optimal_memoryless_policy()
+        mem_fn = counting_walls_1_bit_mem()
     else:
         pi = pi_dict['Pi_phi'][0]
+        mem_fn = None
+        if env_str == 'tmaze_5_two_thirds_up':
+            mem_fn = tmaze_optimal_mem
+        elif env_str == 'tmaze_5_separate_goals_two_thirds_up':
+            mem_fn = tmaze_two_goals_optimal_mem
 
-    get_variances(pi, pomdp)
+    variances, info = get_variances(pi, pomdp)
+
+    mem_params = reverse_softmax(mem_fn)
+
+    mem_aug_pi = pi.repeat(mem_params.shape[-1], axis=0)
+    mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
+
+    mem_aug_variances, mem_aug_info = get_variances(mem_aug_pi, mem_aug_pomdp)
+
+    mem_aug_variances, mem_aug_info = jax.tree.map(lambda x: np.array(x), (mem_aug_variances, mem_aug_info))
+
+    rng = jax.random.PRNGKey(2024)
+    mem_rng, rng = jax.random.split(rng)
+    n_mem_states = mem_params.shape[-1]
+    mem_shape = (pomdp.action_space.n, pomdp.observation_space.n, n_mem_states, n_mem_states)
+    random_mem_params = jax.random.normal(mem_rng, shape=mem_shape) * 0.5
+
+    random_mem_aug_pomdp = memory_cross_product(random_mem_params, pomdp)
+
+    random_mem_aug_variances, random_mem_aug_info = get_variances(mem_aug_pi, random_mem_aug_pomdp)
+
+    random_mem_aug_variances, random_mem_aug_info = jax.tree.map(lambda x: np.array(x), (random_mem_aug_variances, random_mem_aug_info))
+
+    print()
 
