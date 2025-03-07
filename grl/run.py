@@ -5,7 +5,7 @@ from time import time
 
 import numpy as np
 import jax
-from jax.config import config
+from jax import config
 
 from grl.environment import load_pomdp
 from grl.environment.policy_lib import get_start_pi

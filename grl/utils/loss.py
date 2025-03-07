@@ -1,9 +1,10 @@
-import jax.numpy as jnp
-from jax import nn, lax, jit
+from typing import Union
 from functools import partial
 
+import jax.numpy as jnp
+from jax import nn, lax, jit
+
 from grl.utils.policy import deconstruct_aug_policy
-from grl.utils.math import reverse_softmax
 from grl.utils.mdp import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
 from grl.utils.policy_eval import analytical_pe, lstdq_lambda, functional_solve_mdp
 from grl.utils.augmented_policy import construct_aug_policy, deconstruct_aug_policy
@@ -100,16 +101,16 @@ def discrep_loss(
         lambda_1: float = 1.,
         alpha: float = 1.,
         flip_count_prob: bool = False): # initialize static args
-    if lambda_0 == 0. and lambda_1 == 1.:
-        _, mc_vals, td_vals, info = analytical_pe(pi, pomdp)
-        lambda_0_vals = td_vals
-        lambda_1_vals = mc_vals
-    else:
-        # TODO: info here only contains state occupancy, which should lambda agnostic.
-        lambda_0_v_vals, lambda_0_q_vals, _ = lstdq_lambda(pi, pomdp, lambda_=lambda_0)
-        lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi, pomdp, lambda_=lambda_1)
-        lambda_0_vals = {'v': lambda_0_v_vals, 'q': lambda_0_q_vals}
-        lambda_1_vals = {'v': lambda_1_v_vals, 'q': lambda_1_q_vals}
+    # if lambda_0 == 0. and lambda_1 == 1.:
+    #     _, mc_vals, td_vals, info = analytical_pe(pi, pomdp)
+    #     lambda_0_vals = td_vals
+    #     lambda_1_vals = mc_vals
+    # else:
+    # TODO: info here only contains state occupancy, which should lambda agnostic.
+    lambda_0_v_vals, lambda_0_q_vals, _ = lstdq_lambda(pi, pomdp, lambda_=lambda_0)
+    lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi, pomdp, lambda_=lambda_1)
+    lambda_0_vals = {'v': lambda_0_v_vals, 'q': lambda_0_q_vals}
+    lambda_1_vals = {'v': lambda_1_v_vals, 'q': lambda_1_q_vals}
 
     diff = lambda_1_vals[value_type] - lambda_0_vals[value_type]
     c_s = info['occupancy'] * (1 - pomdp.terminal_mask)
@@ -526,3 +527,117 @@ def value_error(pi: jnp.ndarray,
     loss = weighted_err.sum()
 
     return loss, state_vals, expanded_obs_vals
+
+
+@partial(jit, static_argnames=['error_type', 'residual'])
+def mem_state_discrep(
+        mem_params: jnp.ndarray,
+        pi: jnp.ndarray,
+        pomdp: POMDP, # non-state args
+        alpha: float = 1.,
+        value_type: str = 'q',
+        error_type: str = 'l2',
+        lambda_: float = 0.,
+        residual: bool = False): # initialize static args
+    n_mem = mem_params.shape[-1]
+    assert n_mem == 2, "Haven't implemented n_mem > 2 for mem_state_discrep yet!"
+
+    pomdp = memory_cross_product(mem_params, pomdp)
+    lambda_v_vals, lambda_q_vals, info = lstdq_lambda(pi, pomdp, lambda_=lambda_)
+    lambda_vals = {'v': lambda_v_vals, 'q': lambda_q_vals}
+    vals = lambda_vals[value_type]
+
+    occupancy = info['occupancy'] * (1 - pomdp.terminal_mask)
+
+    c_o = occupancy @ pomdp.phi
+    count_o = c_o / c_o.sum()
+
+    count_mask = (1 - jnp.isclose(count_o, 0, atol=1e-12)).astype(float)
+    uniform_o = (jnp.ones(pi.shape[0]) / count_mask.sum()) * count_mask
+    # uniform_o = jnp.ones(pi.shape[0])
+
+    p_o = alpha * uniform_o + (1 - alpha) * count_o
+
+    weight = (pi * p_o[:, None]).T
+    if value_type == 'v':
+        weight = weight.sum(axis=0)
+    weight = lax.stop_gradient(weight)
+
+    # we repeat for every mem state
+    diff = (vals[..., ::2] - vals[..., 1::2]).repeat(n_mem, axis=-1)
+
+    if error_type == 'l2':
+        unweighted_err = (diff**2)
+    elif error_type == 'abs':
+        unweighted_err = jnp.abs(diff)
+    else:
+        raise NotImplementedError(f"Error {error_type} not implemented yet in mem_loss fn.")
+
+    weighted_err = weight * unweighted_err
+    if value_type == 'q':
+        weighted_err = weighted_err.sum(axis=0)
+
+    # negative here, because we want there to be a big diff between
+    # the different values of the mem states
+    loss = -weighted_err.sum()
+    return loss
+
+
+def mem_variance_loss(
+        mem_params: jnp.ndarray,
+        pi: jnp.ndarray,
+        pomdp: POMDP, # input non-static arrays
+        value_type: str = 'q',
+        error_type: str = 'l2',
+        lambda_0: float = 0,
+        lambda_1: float = 1.,  # NOT CURRENTLY USED!
+        residual: bool = False,
+        alpha: float = 1.,
+        flip_count_prob: bool = False):
+    mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
+    loss, _, _ = mstd_err(pi,
+                          mem_aug_pomdp,
+                          # value_type,
+                          error_type,
+                          # alpha,
+                          lambda_=lambda_0,
+                          residual=residual,
+                          # flip_count_prob=flip_count_prob
+                          )
+    return loss
+
+
+def value_second_moment(pi: jnp.ndarray, mdp: Union[POMDP, MDP]):
+    Pi_pi = pi.transpose()[..., None]
+    T_pi = (Pi_pi * mdp.T).sum(axis=0) # T^π(s'|s)
+
+    # First solve for values.
+    # Taken from functional_solve_mdp
+    v_pi_s, q_pi_s = functional_solve_mdp(pi, mdp)
+
+    R_pi_s_s = (Pi_pi * mdp.R).sum(axis=0) # S x S
+
+    R_pi_s_s_squared = (Pi_pi * (mdp.R ** 2)).sum(axis=0)
+
+    R_v_s_prime = R_pi_s_s * v_pi_s[None, ...]
+    R_2_pi_s_over_s_prime = T_pi * (R_pi_s_s_squared + 2 * mdp.gamma * R_v_s_prime)
+    R_2_pi_s = R_2_pi_s_over_s_prime.sum(axis=-1)
+
+    # A*V^{(2)}_pi(s) = b
+    # A = (I - \gamma^2 (T_π))
+    # b = R^{(2)}_π
+    A = (jnp.eye(mdp.state_space.n) - (mdp.gamma ** 2) * T_pi)
+    b = R_2_pi_s
+    V_2_pi_s = jnp.linalg.solve(A, b)  # Second moment of V over state
+
+    # TODO: add Q_2
+    return V_2_pi_s, {'v': v_pi_s, 'q': q_pi_s}
+
+@partial(jit, static_argnames=['error_type', 'residual'])
+def var_err(
+        pi: jnp.ndarray,
+        pomdp: POMDP, # non-state args
+        error_type: str = 'l2',
+        lambda_: float = 0.,
+        residual: bool = False): # initialize static args
+    pass

@@ -12,7 +12,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from jax import random, value_and_grad, nn
-from jax.config import config
+from jax import config
 from jax.debug import print
 from jax_tqdm import scan_tqdm
 import optax
@@ -28,6 +28,7 @@ from grl.utils.loss import (
     pg_objective_func,
     discrep_loss,
     mstd_err,
+    bellman_loss,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
@@ -35,7 +36,6 @@ from grl.utils.loss import (
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
-from grl.vi import policy_iteration_step
 
 
 def get_args():
@@ -63,6 +63,8 @@ def get_args():
                         help='For memory iteration, how many iterations of memory iterations do we do?')
     parser.add_argument('--mi_steps', type=int, default=20000,
                         help='For memory iteration, how many steps of memory improvement do we do per iteration?')
+    parser.add_argument('--save_mem_freq', type=int, default=100,
+                        help='How often do we save our mem params during updates?')
     parser.add_argument('--pi_steps', type=int, default=10000,
                         help='For memory iteration, how many steps of policy improvement do we do per iteration?')
 
@@ -78,6 +80,8 @@ def get_args():
                         help='How many random policies do we use for random kitchen sinks??')
     parser.add_argument('--leave_out_optimal', action='store_true',
                         help="Do we include the optimal policy when we select the initial policy")
+    parser.add_argument('--mem_aug_before_init_pi', action='store_true',
+                        help="Do we augment our memory before selecting the highest LD initial policy?")
     parser.add_argument('--n_mem_states', default=2, type=int,
                         help='for memory_id = 0, how many memory states do we have?')
 
@@ -88,7 +92,8 @@ def get_args():
 
     parser.add_argument('--alpha', default=1., type=float,
                         help='Temperature parameter, for how uniform our lambda-discrep weighting is')
-    parser.add_argument('--lr', default=0.01, type=float)
+    parser.add_argument('--pi_lr', default=0.01, type=float)
+    parser.add_argument('--mi_lr', default=0.01, type=float)
     parser.add_argument('--value_type', default='q', type=str,
                         help='Do we use (v | q) for our discrepancies?')
     parser.add_argument('--error_type', default='l2', type=str,
@@ -97,7 +102,7 @@ def get_args():
                         help='(POLICY ITERATION AND TMAZE_EPS_HYPERPARAMS ONLY) What epsilon do we use?')
 
     # CURRENTLY NOT USED
-    parser.add_argument('--objectives', default=['discrep'])
+    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual'])
 
     parser.add_argument('--study_name', default=None, type=str,
                         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
@@ -111,15 +116,26 @@ def get_args():
     args = parser.parse_args()
     return args
 
-sweep_hparams = {
-    'alpha': 1,
-    'lr': 0.01,
-}
 
 def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callable):
     batch_measures = jax.vmap(measure, in_axes=(0, None))
     all_policy_measures, _, _ = batch_measures(policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
+
+def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
+                                mem_params: jnp.ndarray,
+                                pomdp: POMDP):
+    mem_policies = policies.repeat(mem_params.shape[-1], axis=1)
+    batch_measures = jax.vmap(mem_discrep_loss, in_axes=(None, 0, None))
+    all_policy_measures = batch_measures(mem_params, mem_policies, pomdp)
+    return policies[jnp.argmax(all_policy_measures)]
+
+loss_map = {
+    'ld': discrep_loss,
+    'tde': mstd_err,
+    'tde_residual': mstd_err,
+}
+
 
 def make_experiment(args):
 
@@ -130,6 +146,9 @@ def make_experiment(args):
                                 corridor_length=args.tmaze_corridor_length,
                                 discount=args.tmaze_discount,
                                 junction_up_pi=args.tmaze_junction_up_pi)
+
+
+
     def experiment(rng: random.PRNGKey):
         info = {}
 
@@ -151,9 +170,10 @@ def make_experiment(args):
         # mem_aug_pi_paramses =
         # beginning_info['all_init_mem_measures'] = jax.vmap(augment_and_log_all_measures, in_axes=(0, None, 0))(mem_params, pomdp, mem_aug_pi_paramses)
 
-        optim = get_optimizer(args.optimizer, args.lr)
+        pi_optim = get_optimizer(args.optimizer, args.pi_lr)
+        mi_optim = get_optimizer(args.optimizer, args.mi_lr)
 
-        pi_tx_params = optim.init(updateable_pi_params)
+        pi_tx_params = pi_optim.init(updateable_pi_params)
 
         print("Running initial policy improvement")
         @scan_tqdm(args.pi_steps)
@@ -165,7 +185,7 @@ def make_experiment(args):
             # We add a negative here to params_grad b/c we're trying to
             # maximize the PG objective (value of start state).
             params_grad = -params_grad
-            updates, tx_params = optim.update(params_grad, tx_params, params)
+            updates, tx_params = pi_optim.update(params_grad, tx_params, params)
             params = optax.apply_updates(params, updates)
             outs = (params, tx_params, pomdp)
             return outs, {'v0': v_0, 'v': td_v_vals, 'q': td_q_vals}
@@ -196,13 +216,17 @@ def make_experiment(args):
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        ld_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
+        if args.mem_aug_before_init_pi:
+            measure_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
+        else:
+            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
+        # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
 
-        pis_to_learn_mem = ld_pi_params
+        pis_to_learn_mem = measure_pi_params
 
-        kitchen_sinks_info['ld'] = ld_pi_params.copy()
+        kitchen_sinks_info[args.objective] = measure_pi_params.copy()
 
-        mem_tx_params = optim.init(mem_params)
+        mem_tx_params = mi_optim.init(mem_params)
 
         info['beginning']['init_mem_params'] = mem_params.copy()
         info['after_kitchen_sinks'] = kitchen_sinks_info
@@ -211,7 +235,7 @@ def make_experiment(args):
         def update_mem_step(mem_params: jnp.ndarray,
                             pi_params: jnp.ndarray,
                             mem_tx_params: jnp.ndarray,
-                            objective: str = 'discrep',
+                            objective: str = 'ld',
                             residual: bool = False):
             partial_kwargs = {
                 'value_type': args.value_type,
@@ -233,21 +257,21 @@ def make_experiment(args):
             pi = jax.nn.softmax(pi_params, axis=-1)
             loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
 
-            updates, mem_tx_params = optim.update(params_grad, mem_tx_params, mem_params)
+            updates, mem_tx_params = mi_optim.update(params_grad, mem_tx_params, mem_params)
             new_mem_params = optax.apply_updates(mem_params, updates)
 
             return new_mem_params, pi_params, mem_tx_params, loss
 
         # Make our vmapped memory function
-        update_ld_step = partial(update_mem_step, objective='discrep', residual=False)
+        update_step = partial(update_mem_step,objective=args.objective, residual='residual' in args.objective)
 
         def scan_wrapper(inps, i, f: Callable):
             mem_params, pi_params, mem_tx_params = inps
             new_mem_params, pi_params, mem_tx_params, loss = f(mem_params, pi_params, mem_tx_params)
-            return (new_mem_params, pi_params, mem_tx_params), loss
+            return (new_mem_params, pi_params, mem_tx_params), (loss, new_mem_params)
 
         scan_tqdm_dec = scan_tqdm(args.mi_steps)
-        update_ld_step = scan_tqdm_dec(partial(scan_wrapper, f=update_ld_step))
+        update_step = scan_tqdm_dec(partial(scan_wrapper, f=update_step))
 
         mem_aug_pi_paramses = new_pi_over_mem(pis_to_learn_mem, args.n_mem_states)
         batch_mem_log_all_measures = augment_and_log_all_measures
@@ -255,14 +279,13 @@ def make_experiment(args):
 
         # Memory iteration for all of our measures
         print("Starting {} iterations of λ-discrepancy minimization", args.mi_steps)
-        after_mem_op_info = {}
-        ld_mem_out, losses = jax.lax.scan(update_ld_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
-        ld_mem_paramses, ld_pi_paramses, _ = ld_mem_out
-        ld_mem_info = {'mems': ld_mem_paramses,
-                       'measures': batch_mem_log_all_measures(ld_mem_paramses, pomdp, ld_pi_paramses)}
-        after_mem_op_info['ld'] = ld_mem_info
+        updated_mem_out, (losses, all_mem_params) = jax.lax.scan(update_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
+        updated_mem_paramses, ld_pi_paramses, _ = updated_mem_out
+        updated_mem_info = {'mems': updated_mem_paramses,
+                            'all_mem_params': all_mem_params[::args.save_mem_freq],
+                            'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_pi_paramses)}
 
-        info['after_mem_op'] = after_mem_op_info
+        info['after_mem_op'] = updated_mem_info
 
         def cross_and_improve_pi(mem_params: jnp.ndarray,
                                  pi_params: jnp.ndarray,
@@ -276,7 +299,7 @@ def make_experiment(args):
             return output_pi_tuple, pi_optim_info
 
         # Get our parameters ready for batch policy improvement
-        all_mem_paramses = ld_mem_paramses
+        all_mem_paramses = updated_mem_paramses
 
         # now we do policy improvement over the learnt memory
         # reset pi indices, and mem_augment
@@ -286,7 +309,7 @@ def make_experiment(args):
 
         # Use the same initial random pi params across all final policy improvements.
         all_mem_aug_pi_params = mem_aug_pi_paramses
-        all_mem_pi_tx_paramses = optim.init(all_mem_aug_pi_params)
+        all_mem_pi_tx_paramses = pi_optim.init(all_mem_aug_pi_params)
 
         # Batch policy improvement with PG
         all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(all_mem_paramses, all_mem_aug_pi_params,
@@ -297,8 +320,8 @@ def make_experiment(args):
         ld_improved_pi_params = all_improved_pi_params
 
         final_info = {
-            'ld': {'pi_params': ld_improved_pi_params,
-                   'measures': batch_mem_log_all_measures(ld_mem_paramses, pomdp, ld_improved_pi_params)},
+            'improved_mem': {'pi_params': ld_improved_pi_params,
+                             'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_improved_pi_params)},
         }
 
         info['final'] = final_info
@@ -332,12 +355,21 @@ if __name__ == "__main__":
 
     time_finish = time()
 
-    results_path = results_path(args, entry_point='batch_run')
+    results_path = results_path(args, entry_point=args.objective)
     info = {'logs': outs, 'args': args.__dict__}
 
     end_time = time()
     run_stats = {'start_time': start_time, 'end_time': end_time}
     info['run_stats'] = run_stats
 
+    def perf_from_stats(stats: dict) -> float:
+        return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1).mean().item()
+
+    print("Finished Memory Iteration.")
+    print(f"Average performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values']):.4f}")
+    print(
+        f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values']):.4f}"
+    )
+    print(f"Final performance after MI: {perf_from_stats(outs['final']['improved_mem']['measures']['values']):.4f}")
     print(f"Saving results to {results_path}")
     numpyify_and_save(results_path, info)
