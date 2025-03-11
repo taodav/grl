@@ -54,27 +54,27 @@ aug_policy_probs_reconstructed = construct_aug_policy(mem_logits, action_policy_
 assert np.allclose(aug_policy_probs_reconstructed, aug_policy_probs)
 
 #%%
+if __name__ == "__main__":
+    import numpy as np
 
-import numpy as np
-
-from grl.environment.spec import load_pomdp
-from grl.memory import get_memory
-from grl.utils.augmented_policy import construct_aug_policy, deconstruct_aug_policy
+    from grl.environment.spec import load_pomdp
+    from grl.memory import get_memory
+    from grl.utils.augmented_policy import construct_aug_policy, deconstruct_aug_policy
 
 
-env, info = load_pomdp('tmaze_5_two_thirds_up', memory_id='18')
-pi = info['Pi_phi'][0]
-mem_params = get_memory('18',
-                        n_obs=env.observation_space.n,
-                        n_actions=env.action_space.n,
-                        n_mem_states=2)
+    env, info = load_pomdp('tmaze_5_two_thirds_up', memory_id='18')
+    pi = info['Pi_phi'][0]
+    mem_params = get_memory('18',
+                            n_obs=env.observation_space.n,
+                            n_actions=env.action_space.n,
+                            n_mem_states=2)
 
-inp_aug_pi = np.expand_dims(pi, axis=1).repeat(mem_params.shape[-1], axis=1)
+    inp_aug_pi = np.expand_dims(pi, axis=1).repeat(mem_params.shape[-1], axis=1)
 
-aug_policy = construct_aug_policy(mem_params, inp_aug_pi)
-mem_logits_reconstr, deconstr_aug_pi = deconstruct_aug_policy(aug_policy)
+    aug_policy = construct_aug_policy(mem_params, inp_aug_pi)
+    mem_logits_reconstr, deconstr_aug_pi = deconstruct_aug_policy(aug_policy)
 
-softmax(mem_logits_reconstr, -1).round(3)
-softmax(mem_params, -1).round(3)
+    softmax(mem_logits_reconstr, -1).round(3)
+    softmax(mem_params, -1).round(3)
 
-print()
+    print()

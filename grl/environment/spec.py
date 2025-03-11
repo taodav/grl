@@ -67,12 +67,72 @@ def load_spec(name: str, **kwargs):
 
     return spec
 
+def add_rewards_in_obs(spec: dict) -> dict:
+    phi, T, R = spec['phi'], spec['T'], spec['R']
 
-def load_pomdp(name: str, rand_key: np.random.RandomState = None, **kwargs) -> Tuple[POMDP, dict]:
+    list_new_phi = []
+
+    n_actions = T.shape[0]
+    n_states, n_obs = phi.shape
+    new_states_with_rewards = []
+
+    # first we need to find all states where R[:, :, sp] has more than one unique element
+    for sp in range(n_states):
+        unique_rewards = np.unique(R[:, :, sp])
+        for r in unique_rewards:
+            new_states_with_rewards.append((sp, r))
+
+    new_n_states = len(new_states_with_rewards)
+    # now we construct our new_T, with rewards
+    new_T = []
+    for a in range(n_actions):
+        for s in range(n_states):
+            new_next_pr_s = np.zeros_like(new_n_states)
+            # first find the new index of s
+
+
+
+
+    # now we need to make our indexing of states.
+
+
+    # for o in range(n_obs):
+    #     state_to_reward_map = {}
+    #     for sp in range(n_states):
+    #         if not np.isclose(phi[sp, o], 0):
+    #             # we only check states that map to o
+    #
+    #             state_to_reward_map[sp] = np.unique(R[:, :, sp])
+    #             # for each reward and obs, we list out all states that map to it
+    #             for r in :
+    #                 if r not in reward_to_state_map:
+    #                     reward_to_state_map[r] = []
+    #                 reward_to_state_map[r].append(sp)
+    #
+    #     if len(reward_to_state_map.keys()) >= 2:
+    #         # if we're here, then observation o needs to be split depending on number of keys
+    #         for r, states in reward_to_state_map.items():
+    #             new_obs = np.zeros(n_states)
+    #             new_obs[states] = 1
+    #             list_new_phi.append(new_obs)
+    #     else:
+    #         list_new_phi.append(phi[:, o])
+
+    print()
+
+
+
+def load_pomdp(name: str,
+               reward_in_obs: bool = True,
+               rand_key: np.random.RandomState = None, **kwargs) -> Tuple[POMDP, dict]:
     """
     Wraps a MDP/POMDP specification in a POMDP
     """
     spec = load_spec(name, rand_key=rand_key, **kwargs)
+    if reward_in_obs:
+        # TODO
+        spec = add_rewards_in_obs(spec)
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'], rand_key=rand_key)
     pomdp = POMDP(mdp, spec['phi'])
     return pomdp, {'Pi_phi': spec['Pi_phi'], 'Pi_phi_x': spec['Pi_phi_x']}
+
