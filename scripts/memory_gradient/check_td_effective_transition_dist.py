@@ -8,7 +8,7 @@ from tqdm import trange
 from grl.environment import load_spec
 from grl.memory import get_memory
 from grl.mdp import MDP, POMDP, normalize
-from grl.utils.mdp import get_td_model
+from grl.utils.mdp_solver import get_td_model
 
 def gather_counts(pomdp: POMDP,
                   pi: jnp.ndarray,

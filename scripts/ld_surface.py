@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.interpolate import griddata
 
-from grl.utils.loss import discrep_loss
+from grl.loss import discrep_loss
 from grl.environment import load_pomdp
 
 from definitions import ROOT_DIR

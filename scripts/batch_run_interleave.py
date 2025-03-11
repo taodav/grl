@@ -20,12 +20,13 @@ from grl.environment import load_pomdp
 from grl.utils.lambda_discrep import log_all_measures, augment_and_log_all_measures
 from grl.memory import memory_cross_product
 from grl.utils.file_system import results_path, numpyify_and_save
-from grl.utils.loss import (
+from grl.loss import (
     pg_objective_func,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
-    obs_space_mem_discrep_loss
+    obs_space_mem_discrep_loss,
+    mem_variance_loss
 )
 from grl.utils.optimizer import get_optimizer
 from grl.vi import policy_iteration_step
@@ -125,6 +126,8 @@ def make_experiment(args):
         partial_kwargs['residual'] = args.residual
     elif args.objective == 'obs_space':
         mem_loss_fn = obs_space_mem_discrep_loss
+    elif args.objective == 'variance':
+        mem_loss_fn = mem_variance_loss
     mem_loss_fn = partial(mem_loss_fn, **partial_kwargs)
 
     def experiment(rng: random.PRNGKey):

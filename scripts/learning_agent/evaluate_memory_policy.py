@@ -11,7 +11,7 @@ from grl import environment
 from grl.mdp import POMDP, MDP
 from grl.memory import memory_cross_product
 from grl.utils.math import greedify
-from grl.utils.mdp import pomdp_get_occupancy
+from grl.utils.mdp_solver import pomdp_get_occupancy
 from grl.utils.policy_eval import functional_solve_mdp
 
 #%%

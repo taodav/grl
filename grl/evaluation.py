@@ -6,8 +6,8 @@ from tqdm import trange
 
 from grl.agent.rnn import RNNAgent
 from grl.mdp import MDP, POMDP
-from grl.utils.loss import mse
-from grl.utils.mdp import all_t_discounted_returns
+from grl.loss import mse
+from grl.utils.mdp_solver import all_t_discounted_returns
 
 def eval_episodes(agent: RNNAgent, network_params: dict,
                   env: Union[MDP, POMDP], rand_key: random.PRNGKey,

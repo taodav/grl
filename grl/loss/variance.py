@@ -1,10 +1,11 @@
 from typing import Union
 
 import jax.numpy as jnp
-import numpy as np
 
+from grl.loss.ld import weight_and_sum_discrep_loss
+from grl.memory import memory_cross_product
 from grl.mdp import MDP, POMDP
-from grl.utils.mdp import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
+from grl.utils.mdp_solver import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
 
 # @jit
 def value_second_moment(pi: jnp.ndarray, mdp: Union[POMDP, MDP]):
@@ -81,8 +82,41 @@ def get_variances(pi: jnp.ndarray, pomdp: POMDP):
     }
     info = {
         'values': values,
-        'td_model': td_model
+        'td_model': td_model,
+        'occupancy': occupancy
     }
     return variances, info
+
+
+def variance_loss(pi: jnp.ndarray, pomdp: POMDP):
+    variances, info = get_variances(pi, pomdp)
+    """
+    TODO: What kind of averaging do we do over the variances?
+    """
+    c_s = info['occupancy'] * (1 - pomdp.terminal_mask)
+
+    c_o = c_s @ pomdp.phi
+    count_o = c_o / c_o.sum()
+    # TODO: MAYBE add uniform here?
+
+    weighted_variance = c_o * variances['td']
+    loss = weighted_variance.sum()
+    return loss, variances, info
+
+
+def mem_variance_loss(
+        mem_params: jnp.ndarray,
+        mem_aug_pi: jnp.ndarray,
+        pomdp: POMDP, # input non-static arrays
+        value_type: str = 'v',  # UNUSED
+        error_type: str = 'l2',  # UNUSED
+        lambda_0: float = 0.,
+        lambda_1: float = 1.,
+        alpha: float = 1.,
+        flip_count_prob: bool = False):
+    mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
+    loss, variances, info = variance_loss(mem_aug_pi, mem_aug_pomdp)
+
+    return loss
 
 

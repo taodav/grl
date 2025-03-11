@@ -3,7 +3,7 @@ from functools import partial
 from typing import Union
 from jax import jit
 
-from grl.utils.mdp import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
+from grl.utils.mdp_solver import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
 from grl.mdp import MDP, POMDP
 
 @jit

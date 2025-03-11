@@ -3,7 +3,7 @@ import numpy as np
 
 from grl.environment import load_pomdp
 from grl.memory.lib import get_memory
-from grl.utils.loss import mem_discrep_loss
+from grl.loss import mem_discrep_loss
 
 
 if __name__ == "__main__":

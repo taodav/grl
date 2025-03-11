@@ -1,26 +1,11 @@
-import argparse
-import logging
-import pathlib
-from time import time
-
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 import jax
 from jax.config import config
-from jax.nn import softmax
 
 from grl.environment import load_pomdp
-from grl.environment.policy_lib import get_start_pi
-from grl.utils.loss import mstd_err, discrep_loss, value_error
-from grl.utils.file_system import results_path, numpyify_and_save
-from grl.memory import get_memory, memory_cross_product
-from grl.memory_iteration import run_memory_iteration
-from grl.utils.math import reverse_softmax
-from grl.utils.mdp import functional_get_occupancy
-from grl.utils.policy import construct_aug_policy
-from grl.vi import td_pe
-from grl.utils.policy_eval import analytical_pe, lstdq_lambda
+from grl.loss import discrep_loss
+from grl.utils.policy_eval import analytical_pe
 
 #%%
 

@@ -13,6 +13,7 @@ from grl.utils.file_system import results_path, numpyify_and_save
 from grl.memory import get_memory
 from grl.memory_iteration import run_memory_iteration
 
+
 def add_tmaze_hyperparams(parser: argparse.ArgumentParser):
     # hyperparams for tmaze_hperparams
     parser.add_argument('--tmaze_corridor_length',
@@ -28,6 +29,7 @@ def add_tmaze_hyperparams(parser: argparse.ArgumentParser):
                         type=float,
                         help='probability of traversing up at junction for tmaze_hyperparams')
     return parser
+
 
 if __name__ == '__main__':
     start_time = time()
@@ -73,7 +75,7 @@ if __name__ == '__main__':
     parser.add_argument('--error_type', default='l2', type=str,
                         help='Do we use (l2 | abs) for our discrepancies?')
     parser.add_argument('--objective', default='discrep', type=str,
-                        help='What objective are we trying to optimize? (discrep | bellman | tde | obs_space)')
+                        help='What objective are we trying to optimize? (discrep | bellman | tde | obs_space | variance)')
     parser.add_argument('--residual', action='store_true',
                         help='For Bellman and TD errors, do we add the residual term?')
     parser.add_argument('--lr', default=1, type=float)

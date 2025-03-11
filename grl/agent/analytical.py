@@ -9,9 +9,10 @@ import optax
 
 from grl.mdp import POMDP
 from grl.utils.policy import construct_aug_policy
-from grl.utils.loss import policy_discrep_loss, pg_objective_func, \
+from grl.loss import policy_discrep_loss, pg_objective_func, \
     mem_pg_objective_func, unrolled_mem_pg_objective_func
-from grl.utils.loss import mem_discrep_loss, mem_bellman_loss, mem_tde_loss, obs_space_mem_discrep_loss
+from grl.loss import mem_discrep_loss, mem_bellman_loss, mem_tde_loss, obs_space_mem_discrep_loss
+from grl.loss import mem_variance_loss
 from grl.utils.math import glorot_init, reverse_softmax
 from grl.utils.optimizer import get_optimizer
 from grl.vi import policy_iteration_step
@@ -60,7 +61,7 @@ class AnalyticalAgent:
         :param mem_params: Memory parameters (optional)
         :param value_type: If we optimize lambda discrepancy, what type of lambda discrepancy do we optimize? (v | q)
         :param error_type: lambda discrepancy error type (l2 | abs)
-        :param objective: What objective are we trying to minimize? (discrep | bellman | tde)
+        :param objective: What objective are we trying to minimize? (discrep | bellman | tde | variance)
         :param pi_softmax_temp: When we take the softmax over pi_params, what is the softmax temperature?
         :param policy_optim_alg: What type of policy optimization do we do? (pi | pg)
             (discrep_max: discrepancy maximization | discrep_min: discrepancy minimization
@@ -162,6 +163,8 @@ class AnalyticalAgent:
                 partial_kwargs['residual'] = self.residual
             elif self.objective == 'obs_space':
                 mem_loss_fn = obs_space_mem_discrep_loss
+            elif self.objective == 'variance':
+                mem_loss_fn = mem_variance_loss
 
         partial_mem_discrep_loss = partial(mem_loss_fn, **partial_kwargs)
         self.memory_objective_func = jit(partial_mem_discrep_loss)

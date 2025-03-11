@@ -5,7 +5,7 @@ from jax_tqdm import scan_tqdm
 
 import optax
 
-from grl.utils.loss import pg_objective_func, mstd_err
+from grl.loss import pg_objective_func, mstd_err
 from grl.utils.optimizer import get_optimizer
 from grl.environment import load_pomdp
 

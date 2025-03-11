@@ -9,7 +9,7 @@ import numpy as np
 from grl.environment import load_pomdp
 from grl.memory import memory_cross_product
 from grl.utils.file_system import load_info, numpyify_and_save
-from grl.utils.mdp import POMDP
+from grl.utils.mdp_solver import POMDP
 from grl.utils.policy_eval import analytical_pe, functional_solve_mdp
 
 

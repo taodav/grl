@@ -9,7 +9,7 @@ from grl.agent.actorcritic import ActorCritic
 from grl.agent.analytical import AnalyticalAgent
 from grl.environment import load_spec
 from grl.mdp import MDP, POMDP
-from grl.utils.loss import discrep_loss
+from grl.loss import discrep_loss
 from scripts.learning_agent.memory_iteration import parse_args
 
 data_filepath = 'results/random_policy_discreps/combined_data.pkl'

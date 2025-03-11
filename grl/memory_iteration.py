@@ -1,7 +1,6 @@
 import copy
 import numpy as np
 import time
-from jax_tqdm import scan_tqdm
 import jax
 import jax.numpy as jnp
 from jax import random
@@ -14,9 +13,9 @@ from grl.agent.analytical import AnalyticalAgent
 from grl.mdp import POMDP
 from grl.memory import memory_cross_product
 from grl.utils.policy import deconstruct_aug_policy, get_unif_policies
-from grl.utils.math import glorot_init, greedify, reverse_softmax
+from grl.utils.math import greedify, reverse_softmax
 from grl.utils.lambda_discrep import lambda_discrep_measures
-from grl.utils.loss import discrep_loss, pg_objective_func
+from grl.loss import discrep_loss, pg_objective_func
 from grl.vi import td_pe
 
 def run_memory_iteration(pomdp: POMDP,

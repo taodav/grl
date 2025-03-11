@@ -14,7 +14,7 @@ from grl.environment import load_spec
 from grl.memory import memory_cross_product, get_memory
 from grl.mdp import MDP, POMDP
 from grl.utils.math import normalize
-from grl.utils.mdp import get_td_model, get_p_s_given_o, pomdp_get_occupancy
+from grl.utils.mdp_solver import get_td_model, get_p_s_given_o, pomdp_get_occupancy
 from grl.utils.policy_eval import lstdq_lambda
 from scripts.memory_gradient.check_val_grads import mem_obs_val_func
 from scripts.memory_gradient.intermediate_sample_grads import mem_func

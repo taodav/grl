@@ -1,6 +1,5 @@
 # %% codecell
 from argparse import Namespace
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
 import numpy as np
@@ -8,10 +7,8 @@ import pandas as pd
 from tqdm.notebook import tqdm
 import seaborn as sns
 
-from jax.nn import softmax
 from jax.config import config
 from pathlib import Path
-from collections import namedtuple
 
 config.update('jax_platform_name', 'cpu')
 np.set_printoptions(precision=4)
@@ -19,9 +16,9 @@ plt.rcParams['axes.facecolor'] = 'white'
 plt.rcParams.update({'font.size': 18})
 
 from grl.utils import load_info
-from grl.utils.mdp import all_t_discounted_returns
+from grl.utils.mdp_solver import all_t_discounted_returns
 from grl.utils.data import uncompress_episode_rewards
-from grl.utils.loss import mse
+from grl.loss import mse
 from grl.environment import get_env
 
 from definitions import ROOT_DIR

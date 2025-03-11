@@ -14,7 +14,7 @@ plt.rcParams['axes.facecolor'] = 'white'
 plt.rcParams.update({'font.size': 22})
 
 from grl.utils import load_info
-from grl.utils.mdp import get_perf
+from grl.utils.mdp_solver import get_perf
 from definitions import ROOT_DIR
 np.set_printoptions(precision=3)
 # %% codecell

@@ -1,6 +1,5 @@
 import numpy as np
 import jax
-from jax import jit, random
 
 from grl.environment import load_pomdp
 from grl.utils.math import reverse_softmax
@@ -9,9 +8,8 @@ from grl.memory.lib import counting_walls_1_bit_mem, switching_optimal_determini
 from grl.memory.lib import memory_18 as tmaze_optimal_mem
 from grl.memory.lib import memory_20 as tmaze_two_goals_optimal_mem
 
-from grl.utils.policy_eval import functional_solve_mdp
-from grl.utils.td_variance import get_variances
-from grl.utils.loss import mem_tde_loss
+from grl.loss.variance import get_variances
+from grl.loss import mem_tde_loss, mem_discrep_loss
 
 from grl.environment.policy_lib import switching_two_thirds_right_policy, counting_wall_optimal_memoryless_policy
 
@@ -63,11 +61,6 @@ if __name__ == "__main__":
 
     mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
 
-    mem_aug_variances, mem_aug_info = get_variances(mem_aug_pi, mem_aug_pomdp)
-
-    mem_aug_variances, mem_aug_info = jax.tree.map(lambda x: np.array(x), (mem_aug_variances, mem_aug_info))
-    mem_td_err = mem_tde_loss(mem_params, mem_aug_pi, pomdp)
-
     mem_rng, rng = jax.random.split(rng)
     n_mem_states = mem_params.shape[-1]
     mem_shape = (pomdp.action_space.n, pomdp.observation_space.n, n_mem_states, n_mem_states)
@@ -75,10 +68,20 @@ if __name__ == "__main__":
 
     random_mem_aug_pomdp = memory_cross_product(random_mem_params, pomdp)
 
+    # get variances
     random_mem_aug_variances, random_mem_aug_info = get_variances(mem_aug_pi, random_mem_aug_pomdp)
-
     random_mem_aug_variances, random_mem_aug_info = jax.tree.map(lambda x: np.array(x), (random_mem_aug_variances, random_mem_aug_info))
+
+    mem_aug_variances, mem_aug_info = get_variances(mem_aug_pi, mem_aug_pomdp)
+    mem_aug_variances, mem_aug_info = jax.tree.map(lambda x: np.array(x), (mem_aug_variances, mem_aug_info))
+
+    # TD errors
     random_mem_td_err = mem_tde_loss(random_mem_params, mem_aug_pi, pomdp)
+    mem_td_err = mem_tde_loss(mem_params, mem_aug_pi, pomdp)
+
+    # LDs
+    random_mem_ld = mem_discrep_loss(random_mem_params, mem_aug_pi, pomdp)
+    mem_ld = mem_discrep_loss(mem_params, mem_aug_pi, pomdp)
 
     print()
 

@@ -1,4 +1,3 @@
-import copy
 import math
 from multiprocessing import Pool, freeze_support
 import os
@@ -14,7 +13,7 @@ from optuna.storages import JournalStorage, JournalFileStorage
 from tqdm import tqdm
 from grl.memory.analytical import memory_cross_product
 from grl.utils.discrete_search import SearchNode, generate_hold_mem_fn
-from grl.utils.loss import mem_discrep_loss, mem_tde_loss, value_error
+from grl.loss import mem_discrep_loss, mem_tde_loss, value_error
 from grl.agent.td_lambda import TDLambdaQFunction
 from grl.utils.replaymemory import ReplayMemory
 from grl.utils.math import arg_hardmax, arg_mellowmax, arg_boltzman, one_hot

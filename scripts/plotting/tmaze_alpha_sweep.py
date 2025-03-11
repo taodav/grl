@@ -11,7 +11,7 @@ from pathlib import Path
 config.update('jax_platform_name', 'cpu')
 
 from grl.utils import load_info
-from grl.utils.mdp import get_perf
+from grl.utils.mdp_solver import get_perf
 from definitions import ROOT_DIR
 # %% codecell
 results_dir = Path(ROOT_DIR, 'results', 'tmaze_sweep_alpha')

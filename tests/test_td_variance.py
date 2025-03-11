@@ -10,7 +10,7 @@ from grl.environment import load_pomdp
 from grl.environment.jax_pomdp import load_jax_pomdp, POMDP, LogWrapper, VecEnv
 from grl.environment.policy_lib import switching_two_thirds_right_policy
 
-from grl.utils.td_variance import get_variances
+from grl.loss.td_variance import get_variances
 
 
 def make_collect_samples(env_str: str, env: POMDP,

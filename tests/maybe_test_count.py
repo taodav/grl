@@ -10,7 +10,7 @@ config.update('jax_platform_name', 'cpu')
 from grl.environment import load_spec
 from grl.mdp import MDP, POMDP
 from grl.memory import memory_cross_product, get_memory
-from grl.utils.mdp import functional_get_occupancy
+from grl.utils.mdp_solver import functional_get_occupancy
 
 @jit
 def act(pi: jnp.ndarray, rand_key: random.PRNGKey):

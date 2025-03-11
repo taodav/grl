@@ -7,9 +7,7 @@ from tqdm import tqdm
 
 from grl.environment import get_env
 from grl.utils.data import uncompress_episode_rewards
-from grl.utils.file_system import load_info, numpyify_and_save
-from grl.utils.loss import mse
-from grl.utils.mdp import all_t_discounted_returns
+from grl.utils.file_system import load_info
 
 from definitions import ROOT_DIR
 

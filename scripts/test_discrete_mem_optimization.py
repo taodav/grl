@@ -7,7 +7,7 @@ import sys
 import jax
 from jax.config import config
 import numpy as np
-from tqdm import tqdm, trange
+from tqdm import trange
 
 jax.config.update("jax_enable_x64", True)
 
@@ -17,12 +17,10 @@ from grl.memory_iteration import pi_improvement
 from grl.environment import load_spec
 from grl.mdp import MDP, POMDP
 from grl.utils.policy_eval import lstdq_lambda
-from grl.utils.loss import discrep_loss
+from grl.loss import discrep_loss
 from grl.utils.discrete_search import generate_hold_mem_fn
 from grl.memory import memory_cross_product
 from scripts.learning_agent.memory_iteration import parse_args
-
-import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=3, suppress=True)
 config.update('jax_platform_name', 'cpu')

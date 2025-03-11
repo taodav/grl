@@ -24,10 +24,8 @@ from grl.utils.lambda_discrep import log_all_measures, augment_and_log_all_measu
 from grl.memory import memory_cross_product
 from grl.utils.file_system import results_path, numpyify_and_save
 from grl.utils.math import reverse_softmax
-from grl.utils.loss import (
+from grl.loss import (
     pg_objective_func,
-    discrep_loss,
-    mstd_err,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
@@ -35,7 +33,6 @@ from grl.utils.loss import (
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
-from grl.vi import policy_iteration_step
 
 
 def get_args():

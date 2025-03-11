@@ -12,7 +12,7 @@ from grl.environment import load_spec
 from grl.memory import get_memory
 from grl.mdp import MDP, POMDP
 from grl.utils.math import reverse_softmax
-from grl.utils.loss import mem_discrep_loss
+from grl.loss import mem_discrep_loss
 
 from definitions import ROOT_DIR
 

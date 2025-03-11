@@ -5,7 +5,7 @@ from jax.config import config
 config.update('jax_platform_name', 'cpu')
 
 from grl import environment, MDP, POMDP
-from grl.utils.mdp import get_p_s_given_o, functional_create_td_model, pomdp_get_occupancy
+from grl.utils.mdp_solver import get_p_s_given_o, functional_create_td_model, pomdp_get_occupancy
 from grl.utils.policy_eval import functional_solve_pomdp, functional_solve_mdp
 
 # Original, serial functions

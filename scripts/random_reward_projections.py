@@ -3,7 +3,7 @@ import jax
 from jax import random
 import jax.numpy as jnp
 
-from grl.utils.loss import discrep_loss
+from grl.loss import discrep_loss
 from grl.mdp import POMDP, MDP
 from grl.environment import load_pomdp
 

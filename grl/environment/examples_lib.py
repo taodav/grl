@@ -3,7 +3,7 @@ from pathlib import Path
 
 from grl.mdp import random_stochastic_matrix
 from grl.environment.pomdp_file import POMDPFile
-from grl.utils.mdp import to_dict
+from grl.utils.mdp_solver import to_dict
 
 from definitions import ROOT_DIR
 

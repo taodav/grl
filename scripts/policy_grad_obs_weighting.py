@@ -10,7 +10,7 @@ from grl.memory import memory_cross_product, get_memory
 from grl.mdp import MDP, POMDP
 from grl.utils.policy_eval import lstdq_lambda
 from grl.utils.math import reverse_softmax
-from grl.utils.loss import pg_objective_func
+from grl.loss import pg_objective_func
 
 @partial(jax.jit, static_argnames='obs')
 def policy_grad_objective(pi_params: jnp.ndarray, pomdp: POMDP, obs: int):

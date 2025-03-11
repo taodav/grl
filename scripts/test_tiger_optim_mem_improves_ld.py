@@ -1,9 +1,7 @@
-from jax.nn import softmax
-
 from grl.environment import load_pomdp
 from grl.environment.policy_lib import get_start_pi
 from grl.memory import get_memory, memory_cross_product
-from grl.utils.loss import discrep_loss
+from grl.loss import discrep_loss
 from grl.utils.math import softmax
 
 pomdp, pi_dict = load_pomdp('tiger-alt-start', n_mem_states='2')

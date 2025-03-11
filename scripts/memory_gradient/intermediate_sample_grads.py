@@ -10,7 +10,7 @@ from tqdm import tqdm
 from grl.environment import load_spec
 from grl.memory import memory_cross_product, get_memory
 from grl.mdp import MDP, POMDP
-from grl.utils.loss import obs_space_mem_discrep_loss
+from grl.loss import obs_space_mem_discrep_loss
 from grl.utils.policy_eval import lstdq_lambda
 
 from scripts.variance_calcs import collect_episodes

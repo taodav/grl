@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from grl.mdp import MDP, POMDP
 from grl.environment import load_spec
-from grl.utils.loss import discrep_loss
+from grl.loss import discrep_loss
 
 def heatmap(spec: dict, error_type: str = 'l2', num_ticks: int = 5):
     """

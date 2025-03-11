@@ -14,7 +14,7 @@ from tqdm import tqdm
 from grl.evaluation import eval_episodes
 from grl.agent.rnn import RNNAgent
 from grl.utils.data import Batch, compress_episode_rewards
-from grl.utils.mdp import all_t_discounted_returns
+from grl.utils.mdp_solver import all_t_discounted_returns
 from grl.utils.replaymemory import EpisodeBuffer
 
 class Trainer:

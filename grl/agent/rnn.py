@@ -11,7 +11,7 @@ from optax import GradientTransformation
 
 from grl.model.rnn import get_rnn_cell
 from grl.utils.data import Batch
-from grl.utils.loss import mse, seq_sarsa_loss
+from grl.loss import mse, seq_sarsa_loss
 
 class RNNAgent:
     def __init__(self, network: nn.Module, optimizer: GradientTransformation,

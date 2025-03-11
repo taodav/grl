@@ -6,7 +6,7 @@ from jax.nn import softmax
 
 from grl import POMDP
 from grl.memory.analytical import memory_cross_product
-from grl.utils.loss import discrep_loss, mstd_err, value_error
+from grl.loss import discrep_loss, mstd_err, value_error
 from grl.utils.policy_eval import analytical_pe
 
 def lambda_discrep_measures(pomdp: POMDP, pi: jnp.ndarray, discrep_loss_fn: Callable = None):

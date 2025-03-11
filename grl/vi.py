@@ -5,9 +5,9 @@ from typing import Tuple
 from functools import partial
 
 from grl.utils.math import glorot_init, reverse_softmax
-from grl.utils.mdp import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
+from grl.utils.mdp_solver import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
 from grl.mdp import MDP, POMDP
-from grl.utils import functional_solve_mdp
+from grl.utils.policy_eval import functional_solve_mdp
 
 @jit
 def value_iteration_step(vp: jnp.ndarray, mdp: MDP):
