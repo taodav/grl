@@ -74,21 +74,47 @@ def add_rewards_in_obs(spec: dict) -> dict:
 
     n_actions = T.shape[0]
     n_states, n_obs = phi.shape
-    new_states_with_rewards = []
+    states_to_rewards = {}
+    new_states = []
 
+    new_n_states = 0
     # first we need to find all states where R[:, :, sp] has more than one unique element
     for sp in range(n_states):
         unique_rewards = np.unique(R[:, :, sp])
+        states_to_rewards[sp] = unique_rewards
+        new_n_states += len(unique_rewards)
         for r in unique_rewards:
-            new_states_with_rewards.append((sp, r))
+            new_states.append((sp, r))
 
-    new_n_states = len(new_states_with_rewards)
     # now we construct our new_T, with rewards
-    new_T = []
+    new_T = np.eye(new_n_states)[None, ...].repeat(n_actions, axis=0)
+    new_R = np.zeros_like(new_T)
+
     for a in range(n_actions):
         for s in range(n_states):
-            new_next_pr_s = np.zeros_like(new_n_states)
-            # first find the new index of s
+
+            # first find the new index of current state s
+            matching_new_indices = [(i, s, r) for i, (s_new, r) in enumerate(new_states) if s == s_new]
+
+            for new_s, _, r in matching_new_indices:
+
+                if np.all(T[:, s, s] == 1):
+                    # TODO: check here for terminal. If og state was terminal, this new one will be absorbing to itself as well.
+                    pass
+                else:
+                    for sp in range(n_states):
+                        # first reset the row
+                        new_T[a, new_s] *= 0
+
+                        # now we need to find the corresponding next state.
+                        # There should be only one entry since (s, r) entries are unique.
+                        next_new_s = new_states.index((sp, R[a, s, sp]))
+
+                        # Now we assign the probability accordingly
+                        new_T[a, new_s, next_new_s] = T[a, s, sp]
+                        new_R[a, new_s, next_new_s] = r
+
+
 
 
 
