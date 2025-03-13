@@ -17,21 +17,27 @@ from grl.environment.policy_lib import switching_two_thirds_right_policy, counti
 
 if __name__ == "__main__":
     # env_str = 'tmaze_5_two_thirds_up'
-    env_str = 'tmaze_5_separate_goals_two_thirds_up'
+    # env_str = 'tmaze_5_separate_goals_two_thirds_up'
     # env_str = 'counting_wall'
-    # env_str = 'switching'
+    env_str = 'switching'
 
     pi_str = 'random'
+    reward_in_obs = False
     rng = jax.random.PRNGKey(2024)
 
     pomdp, pi_dict = load_pomdp(env_str,
                                 corridor_length=5,
-                                discount=0.9)
+                                discount=0.9,
+                                reward_in_obs=reward_in_obs)
 
     # This is state-based variance
     if env_str == 'switching':
         pi = switching_two_thirds_right_policy()
         mem_fn = switching_optimal_deterministic_1_bit_mem()
+        if reward_in_obs:
+            # since reward_in_obs is True
+            mem_fn = np.concatenate((mem_fn, mem_fn[:, -1:]), axis=1)
+            pi = np.concatenate((pi, pi[-1:]), axis=0)
     elif env_str == 'counting_wall':
         pi = counting_wall_optimal_memoryless_policy()
         mem_fn = counting_walls_1_bit_mem()
@@ -40,6 +46,10 @@ if __name__ == "__main__":
         mem_fn = None
         if env_str == 'tmaze_5_two_thirds_up':
             mem_fn = tmaze_optimal_mem
+            if reward_in_obs:
+                # since reward_in_obs is True
+                term_mem_fn = mem_fn[:, -1:].repeat(2, axis=1)
+                mem_fn = np.concatenate((mem_fn, term_mem_fn), axis=1)
         elif env_str == 'tmaze_5_separate_goals_two_thirds_up':
             mem_fn = tmaze_two_goals_optimal_mem
 

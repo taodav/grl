@@ -10,7 +10,7 @@ from grl.environment import load_pomdp
 from grl.environment.jax_pomdp import load_jax_pomdp, POMDP, LogWrapper, VecEnv
 from grl.environment.policy_lib import switching_two_thirds_right_policy
 
-from grl.loss.td_variance import get_variances
+from grl.loss.variance import get_variances
 
 
 def make_collect_samples(env_str: str, env: POMDP,
@@ -128,9 +128,9 @@ def make_collect_samples(env_str: str, env: POMDP,
 
 if __name__ == "__main__":
     # jax.disable_jit(True)
-    env_str = 'tmaze_5_separate_goals_two_thirds_up'
+    # env_str = 'tmaze_5_separate_goals_two_thirds_up'
     # env_str = 'counting_wall'
-    # env_str = 'switching'
+    env_str = 'switching'
 
     n_samples = int(1e6)
 

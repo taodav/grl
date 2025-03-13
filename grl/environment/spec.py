@@ -1,3 +1,4 @@
+from copy import deepcopy
 import inspect
 from pathlib import Path
 from typing import Tuple
@@ -68,7 +69,7 @@ def load_spec(name: str, **kwargs):
     return spec
 
 def add_rewards_in_obs(spec: dict) -> dict:
-    phi, T, R = spec['phi'], spec['T'], spec['R']
+    phi, T, R, p0, Pi_phi = spec['phi'], spec['T'], spec['R'], spec['p0'], spec['Pi_phi']
 
     list_new_phi = []
 
@@ -97,66 +98,94 @@ def add_rewards_in_obs(spec: dict) -> dict:
             matching_new_indices = [(i, s, r) for i, (s_new, r) in enumerate(new_states) if s == s_new]
 
             for new_s, _, r in matching_new_indices:
+                # first reset the row
+                new_T[a, new_s] *= 0
 
                 if np.all(T[:, s, s] == 1):
-                    # TODO: check here for terminal. If og state was terminal, this new one will be absorbing to itself as well.
-                    pass
+                    # Check here for terminal. If og state was terminal, this new one will be absorbing to itself as well.
+                    new_T[a, new_s, new_s] = 1
                 else:
                     for sp in range(n_states):
-                        # first reset the row
-                        new_T[a, new_s] *= 0
-
                         # now we need to find the corresponding next state.
                         # There should be only one entry since (s, r) entries are unique.
                         next_new_s = new_states.index((sp, R[a, s, sp]))
 
                         # Now we assign the probability accordingly
                         new_T[a, new_s, next_new_s] = T[a, s, sp]
-                        new_R[a, new_s, next_new_s] = r
+                        new_R[a, new_s, next_new_s] = R[a, s, sp]
 
+    # now we need to make a new phi function,
+    # mapping all our reward-expanded states into new observations.
+    new_phi = []
+    o_to_new_o_mapping = {}
+    new_o = 0
+    for o in range(n_obs):
+        phi_o = phi[:, o]  # prob dist of shape |S| (og)
+        applicable_s_for_o = np.nonzero(phi_o)[0]
 
+        # make a unique list of all rewards for this observation.
+        # This is how many new observations we should be adding.
+        all_o_rewards = []
+        for s in applicable_s_for_o:
+            all_o_rewards += states_to_rewards[s].tolist()
+        all_unique_o_rewards = np.unique(all_o_rewards)
 
+        # for each reward
+        for r in all_unique_o_rewards:
+            new_phi_o_r = np.zeros(new_n_states)
+            # populate our new phi column
+            for s in applicable_s_for_o:
+                new_s = new_states.index((s, r))
+                new_phi_o_r[new_s] = phi[s, o]
+            new_phi.append(new_phi_o_r)
+            if o not in o_to_new_o_mapping:
+                o_to_new_o_mapping[o] = []
+            o_to_new_o_mapping[o].append(new_o)
+            new_o += 1
 
+    new_phi = np.stack(new_phi, axis=-1)
 
+    # Now we need to expand p0.
+    # we (uniformly) split up starting probabilities among split states.
+    new_p0 = np.zeros(new_n_states)
+    for new_s, (s, r) in enumerate(new_states):
+        new_p0[new_s] = p0[s] / len(states_to_rewards[s].tolist())
 
-    # now we need to make our indexing of states.
+    # finally, we have our policies.
+    # we'll just copy our policies
+    new_Pi_phi = None
+    if Pi_phi is not None:
+        new_Pi_phi = []
+        for pi in Pi_phi:
+            new_pi = []
+            for o, pi_o in enumerate(pi):
+                for new_o in o_to_new_o_mapping[o]:
+                    new_pi.append(pi_o)
 
+            new_Pi_phi.append(np.stack(new_pi, axis=0))
+        new_Pi_phi = np.stack(new_Pi_phi, axis=0)
 
-    # for o in range(n_obs):
-    #     state_to_reward_map = {}
-    #     for sp in range(n_states):
-    #         if not np.isclose(phi[sp, o], 0):
-    #             # we only check states that map to o
-    #
-    #             state_to_reward_map[sp] = np.unique(R[:, :, sp])
-    #             # for each reward and obs, we list out all states that map to it
-    #             for r in :
-    #                 if r not in reward_to_state_map:
-    #                     reward_to_state_map[r] = []
-    #                 reward_to_state_map[r].append(sp)
-    #
-    #     if len(reward_to_state_map.keys()) >= 2:
-    #         # if we're here, then observation o needs to be split depending on number of keys
-    #         for r, states in reward_to_state_map.items():
-    #             new_obs = np.zeros(n_states)
-    #             new_obs[states] = 1
-    #             list_new_phi.append(new_obs)
-    #     else:
-    #         list_new_phi.append(phi[:, o])
-
-    print()
-
+    new_spec = deepcopy(spec)
+    new_spec.update({
+        'phi': new_phi,
+        'T': new_T,
+        'R': new_R,
+        'p0': new_p0,
+        'Pi_phi': new_Pi_phi,
+    })
+    if 'Pi_phi_x' in new_spec and new_spec['Pi_phi_x'] is not None:
+        new_spec['Pi_phi_x'] = None
+    return new_spec
 
 
 def load_pomdp(name: str,
-               reward_in_obs: bool = True,
+               reward_in_obs: bool = False,
                rand_key: np.random.RandomState = None, **kwargs) -> Tuple[POMDP, dict]:
     """
     Wraps a MDP/POMDP specification in a POMDP
     """
     spec = load_spec(name, rand_key=rand_key, **kwargs)
     if reward_in_obs:
-        # TODO
         spec = add_rewards_in_obs(spec)
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'], rand_key=rand_key)
     pomdp = POMDP(mdp, spec['phi'])
