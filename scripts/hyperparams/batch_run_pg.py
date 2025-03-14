@@ -22,7 +22,6 @@ hparams = {
         'optimizer': 'adam',
         'lr': 0.01,
         'n_mem_states': [2, 4],
-        'mi_iterations': 1,
         'random_policies': 10,
         'n_seeds': 10,
         'platform': 'gpu'
