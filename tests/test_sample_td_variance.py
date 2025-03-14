@@ -8,7 +8,7 @@ import numpy as np
 
 from grl.environment import load_pomdp
 from grl.environment.jax_pomdp import load_jax_pomdp, POMDP, LogWrapper, VecEnv
-from grl.environment.policy_lib import switching_two_thirds_right_policy
+from grl.environment.policy_lib import switching_two_thirds_right_policy, counting_wall_optimal_memoryless_policy
 
 from grl.loss.variance import get_variances
 
@@ -57,7 +57,8 @@ def make_collect_samples(env_str: str, env: POMDP,
             pi_arr = switching_two_thirds_right_policy()
             return partial(tabular_policy, pi_arr=pi_arr, epsilon=epsilon), pi_arr
         elif env_str == 'counting_wall':
-            raise NotImplementedError
+            pi_arr = counting_wall_optimal_memoryless_policy()
+            return partial(tabular_policy, pi_arr=pi_arr, epsilon=epsilon), pi_arr
         raise NotImplementedError
 
     policy, pi = get_policy(env_str, epsilon=epsilon)
@@ -74,12 +75,14 @@ def make_collect_samples(env_str: str, env: POMDP,
 
         env_rngs = jax.random.split(rng, n_envs)
         obs, env_state, reward, done, info = env.step(env_rngs, env_state, action, env_params)
+        next_obs = jnp.zeros_like(obs).at[-1].set(1) * done + (1 - done) * obs
         experience = {
             'obs': last_obs,
             'action': action,
             'reward': reward,
             'done': done,
-            'state': state
+            'state': state,
+            'next_obs': next_obs
         }
         runner_state = (env_state, obs, done, rng)
 

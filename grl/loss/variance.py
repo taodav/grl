@@ -14,30 +14,31 @@ def value_second_moment(pi: jnp.ndarray, mdp: Union[POMDP, MDP]):
     Pi_pi = pi.transpose()[..., None]
     T_pi = (Pi_pi * mdp.T).sum(axis=0) # T^π(s'|s)
     R_pi = (Pi_pi * mdp.T * mdp.R).sum(axis=0).sum(axis=-1) # R^π(s)
-
+    gammas = ((1 - mdp.terminal_mask) * mdp.gamma)[None, ...]
     # A*V_pi(s) = b
     # A = (I - \gamma (T^π))
     # b = R^π
-    A = (jnp.eye(mdp.state_space.n) - mdp.gamma * T_pi)
+    A = (jnp.eye(mdp.state_space.n) - gammas * T_pi)
     b = R_pi
     v_pi_s = jnp.linalg.solve(A, b)
 
     R_sa = (mdp.T * mdp.R).sum(axis=-1) # R(s,a)
     q_pi_s = (R_sa + (mdp.gamma * mdp.T @ v_pi_s))
 
+    # TODO: HERE we assume that s' does not determine next reward. I think we need to change R_obs_obs?
+    R_pi_s_s = R_pi[..., None].repeat(mdp.T.shape[-1], axis=-1)  # R(s, s')
 
-    R_pi_s_s = (Pi_pi * mdp.R).sum(axis=0) # S x S
-
-    R_pi_s_s_squared = (Pi_pi * (mdp.R ** 2)).sum(axis=0)
+    R_pi_squared = (Pi_pi * mdp.T * (mdp.R**2)).sum(axis=0).sum(axis=-1) # R^π(s)
+    R_pi_s_s_squared = R_pi_squared[..., None].repeat(mdp.T.shape[-1], axis=-1)  # R(s, s')**2
 
     R_v_s_prime = R_pi_s_s * v_pi_s[None, ...]
-    R_2_pi_s_over_s_prime = T_pi * (R_pi_s_s_squared + 2 * mdp.gamma * R_v_s_prime)
+    R_2_pi_s_over_s_prime = T_pi * (R_pi_s_s_squared + 2 * gammas * R_v_s_prime)
     R_2_pi_s = R_2_pi_s_over_s_prime.sum(axis=-1)
 
     # A*V^{(2)}_pi(s) = b
     # A = (I - \gamma^2 (T_π))
     # b = R^{(2)}_π
-    A = (jnp.eye(mdp.state_space.n) - (mdp.gamma ** 2) * T_pi)
+    A = (jnp.eye(mdp.state_space.n) - (gammas ** 2) * T_pi)
     b = R_2_pi_s
     V_2_pi_s = jnp.linalg.solve(A, b)  # Second moment of V over state
 

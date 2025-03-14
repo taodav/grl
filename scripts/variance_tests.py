@@ -11,8 +11,10 @@ from grl.memory.lib import memory_20 as tmaze_two_goals_optimal_mem
 from grl.loss.variance import get_variances
 from grl.loss import mem_tde_loss, mem_discrep_loss
 
-from grl.environment.policy_lib import switching_two_thirds_right_policy, counting_wall_optimal_memoryless_policy
-
+from grl.environment.policy_lib import (
+    switching_two_thirds_right_policy, counting_wall_optimal_memoryless_policy,
+    switching_og_two_thirds_right_policy
+)
 
 
 if __name__ == "__main__":
@@ -33,6 +35,14 @@ if __name__ == "__main__":
     # This is state-based variance
     if env_str == 'switching':
         pi = switching_two_thirds_right_policy()
+        mem_fn = switching_optimal_deterministic_1_bit_mem()
+        if reward_in_obs:
+            # since reward_in_obs is True
+            mem_fn = np.concatenate((mem_fn, mem_fn[:, -1:]), axis=1)
+            pi = np.concatenate((pi, pi[-1:]), axis=0)
+    elif env_str == 'switching_og':
+        pi = switching_og_two_thirds_right_policy()
+        # TODO: this
         mem_fn = switching_optimal_deterministic_1_bit_mem()
         if reward_in_obs:
             # since reward_in_obs is True

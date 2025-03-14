@@ -68,6 +68,11 @@ def switching_two_thirds_right_policy():
          [2/3, 1/3],
          [1., 0.]])
     return pi
+def switching_og_two_thirds_right_policy():
+    pi = jnp.array(
+        [[2/3, 1/3],
+         [1., 0.]])
+    return pi
 
 
 def counting_wall_optimal_memoryless_policy():
