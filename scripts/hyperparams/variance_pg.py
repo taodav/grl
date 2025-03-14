@@ -5,6 +5,7 @@ exp_name = Path(__file__).stem
 hparams = {
     'file_name':
         f'runs_{exp_name}.txt',
+    'entry': '-m grl.batch_run',
     'args': [{
         'spec': [
             'tiger-alt-start', 'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
@@ -24,9 +25,10 @@ hparams = {
         'optimizer': 'adam',
         'lr': 0.01,
         'use_memory': 0,
-        'n_mem_states': [2, 4, 8],
+        'n_mem_states': [2, 4],
         'mi_iterations': 1,
         'n_seeds': 10,
+        'platform': 'gpu',
         'seed': 2025,
         # 'seed': [2020 + i for i in range(10)],
     }]
