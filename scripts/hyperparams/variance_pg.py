@@ -25,7 +25,7 @@ hparams = {
         'optimizer': 'adam',
         'lr': 0.01,
         'n_mem_states': [2, 4],
-        'n_seeds': 10,
+        'n_seeds': 5,
         'platform': 'gpu',
         'seed': 2025,
         # 'seed': [2020 + i for i in range(10)],
