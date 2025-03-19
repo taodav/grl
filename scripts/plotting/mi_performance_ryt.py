@@ -7,7 +7,7 @@ import pandas as pd
 
 from argparse import Namespace
 from jax.nn import softmax
-from jax.config import config
+from jax import config
 from pathlib import Path
 from collections import namedtuple
 from tqdm import tqdm
@@ -20,6 +20,16 @@ plt.rcParams.update({'font.size': 18})
 from scripts.plotting.parse_experiments import parse_baselines, parse_dirs, parse_batch_dirs
 from definitions import ROOT_DIR
 
+belief_perf = {
+    '4x3.95': 2.001088974770953,
+    'cheese.95': 3.5788796295075453,
+    'network': 296.2187032020679,
+    'paint.95': 3.293597084371071,
+    'parity_check': 0.8099999999999998,
+    'shuttle.95': 32.88972468934434,
+    'tiger-alt-start': 3.7701893248807115,
+    'tmaze_5_two_thirds_up': 2.1257640000000007
+}
 
 # %% codecell
 # experiment_dirs = [
@@ -28,7 +38,7 @@ from definitions import ROOT_DIR
 # ]
 
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'parity_check_kitchen_sinks_pg'),
+    Path(ROOT_DIR, 'results', 'variance_pg'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -39,12 +49,14 @@ split_by = [arg for arg in args_to_keep if arg != 'seed'] + ['experiment']
 
 # this option allows us to compare to either the optimal belief state soln
 # or optimal state soln. ('belief' | 'state')
-compare_to = 'belief'
-
 policy_optim_alg = 'policy_grad'
 
 spec_plot_order = [
-    # 'network', 'paint.95', '4x3.95', 'tiger-alt-start', 'shuttle.95', 'cheese.95', 'tmaze_5_two_thirds_up'
+    'network',
+    'paint.95',
+    '4x3.95', 'tiger-alt-start',
+    # 'shuttle.95',
+    'cheese.95', 'tmaze_5_two_thirds_up',
     'parity_check'
 ]
 
@@ -55,19 +67,16 @@ plot_key = 'final_mem_perf'  # for single runs
 
 # %% codecell
 
-compare_to_dict = parse_baselines(spec_plot_order,
-                                  vi_results_dir,
-                                  pomdp_files_dir,
-                                  compare_to=compare_to)
+compare_to_dict = belief_perf
 
 
 # %% codecell
-all_res_df = parse_dirs(experiment_dirs,
-                        compare_to_dict,
-                        args_to_keep)
-# all_res_df = parse_batch_dirs(experiment_dirs,
-#                               compare_to_dict,
-#                               args_to_keep)
+# all_res_df = parse_dirs(experiment_dirs,
+#                         compare_to_dict,
+#                         args_to_keep)
+all_res_df = parse_batch_dirs(experiment_dirs,
+                              compare_to_dict,
+                              args_to_keep)
 
 
 
@@ -215,7 +224,7 @@ for i, exp_name in enumerate(experiments):
                color=mem_colors[j])
 
 ax.set_ylim([0, 1.05])
-ax.set_ylabel(f'Relative Performance\n (w.r.t. optimal {compare_to} & initial policy)')
+ax.set_ylabel(f'Relative Performance\n (w.r.t. optimal belief & initial policy)')
 ax.set_xticks(x + group_width / 2)
 ax.set_xticklabels(xlabels)
 # ax.legend(bbox_to_anchor=(0.317, 0.62), framexalpha=0.95)

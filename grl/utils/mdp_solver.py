@@ -31,7 +31,7 @@ def get_p_s_given_o(phi: jnp.ndarray, occupancy: jnp.ndarray):
     p_pi_of_s_given_o = w / (w.sum(axis=0) + 1e-10)
     return p_pi_of_s_given_o
 
-# @jit
+@jit
 def functional_create_td_model(p_pi_of_s_given_o: jnp.ndarray, pomdp: POMDP):
     # creates an (n_obs * n_obs) x 2 array of all possible observation to observation pairs.
     # we flip here so that we have curr_obs, next_obs (order matters).

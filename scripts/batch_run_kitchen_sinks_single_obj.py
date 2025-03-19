@@ -28,6 +28,7 @@ from grl.loss import (
     pg_objective_func,
     discrep_loss,
     mstd_err,
+    variance_loss,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
@@ -100,9 +101,11 @@ def get_args():
                         help='Do we use (l2 | abs) for our discrepancies?')
     parser.add_argument('--epsilon', default=0.1, type=float,
                         help='(POLICY ITERATION AND TMAZE_EPS_HYPERPARAMS ONLY) What epsilon do we use?')
+    parser.add_argument('--reward_in_obs', action='store_true',
+                        help='Do we add reward into observation?')
 
     # CURRENTLY NOT USED
-    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual'])
+    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance'])
 
     parser.add_argument('--study_name', default=None, type=str,
                         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
@@ -130,14 +133,15 @@ def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
     all_policy_measures = batch_measures(mem_params, mem_policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
 
-loss_map = {
-    'ld': discrep_loss,
-    'tde': mstd_err,
-    'tde_residual': mstd_err,
-}
-
 
 def make_experiment(args):
+
+    loss_map = {
+        'ld': discrep_loss,
+        'tde': mstd_err,
+        'tde_residual': mstd_err,
+        'variance': variance_loss
+    }
 
     # Get POMDP definition
     pomdp, pi_dict = load_pomdp(args.spec,
@@ -145,7 +149,8 @@ def make_experiment(args):
                                 n_mem_states=args.n_mem_states,
                                 corridor_length=args.tmaze_corridor_length,
                                 discount=args.tmaze_discount,
-                                junction_up_pi=args.tmaze_junction_up_pi)
+                                junction_up_pi=args.tmaze_junction_up_pi,
+                                reward_in_obs=args.reward_in_obs)
 
 
 
@@ -219,8 +224,8 @@ def make_experiment(args):
         if args.mem_aug_before_init_pi:
             measure_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
         else:
-            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
-        # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
+            # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
+            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
 
         pis_to_learn_mem = measure_pi_params
 
@@ -280,7 +285,7 @@ def make_experiment(args):
         mem_input_tuple = (mem_params, mem_aug_pi_paramses, mem_tx_params)
 
         # Memory iteration for all of our measures
-        print("Starting {} iterations of λ-discrepancy minimization", args.mi_steps)
+        print("Starting {} iterations of {} minimization", args.mi_steps, args.objective)
         updated_mem_out, (losses, all_mem_params) = jax.lax.scan(update_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
         updated_mem_paramses, ld_pi_paramses, _ = updated_mem_out
         updated_mem_info = {'mems': updated_mem_paramses,

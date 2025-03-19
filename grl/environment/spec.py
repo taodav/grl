@@ -135,8 +135,11 @@ def add_rewards_in_obs(spec: dict) -> dict:
             new_phi_o_r = np.zeros(new_n_states)
             # populate our new phi column
             for s in applicable_s_for_o:
-                new_s = new_states.index((s, r))
-                new_phi_o_r[new_s] = phi[s, o]
+                # if s admits an r reward, set the new phi to the corresponding phi.
+                # if not, it should remain 0.
+                if (s, r) in new_states:
+                    new_s = new_states.index((s, r))
+                    new_phi_o_r[new_s] = phi[s, o]
             new_phi.append(new_phi_o_r)
             if o not in o_to_new_o_mapping:
                 o_to_new_o_mapping[o] = []

@@ -63,46 +63,45 @@ def parse_batch_dirs(exp_dirs: list[Path],
                                                     apo_measures['values']['p0'])
             compare_to_perf = baseline_dict[args['spec']]
 
-            if isinstance(args['objectives'], str):
-                keys = [args['objectives']]
+            # if isinstance(args['objectives'], str):
+            #     keys = [args['objectives']]
+            # else:
+            #     keys = args['objectives']
+
+            # for i, key in enumerate(keys):
+            #     key = kitchen_obj_map.get(key, key)
+            #     objective, residual = key, False
+            #     if key == 'mstde_res':
+            #         objective, residual = 'mstde', True
+
+
+            objective = args['objective']
+            single_res = {k: args[k] for k in args_to_keep}
+            single_res['experiment'] = exp_dir.name + f'_{objective}'
+            single_res['objective'] = objective
+
+            final = logs['final']
+            final_measures = final['measures']
+            if 'kitchen' in exp_dir.stem:
+                # For now, we assume kitchen selection objective == mem learning objective
+                final_mem_perf = np.einsum('ij,ij->i',
+                                           final_measures['values']['state_vals']['v'][:, i],
+                                           final_measures['values']['p0'][:, i])
+
             else:
-                keys = args['objectives']
+                final_mem_perf = np.einsum('ij,ij->i',
+                                           final_measures['values']['state_vals']['v'],
+                                           final_measures['values']['p0'])
 
-            for i, key in enumerate(keys):
-                key = kitchen_obj_map.get(key, key)
-                objective, residual = key, False
-                if key == 'mstde_res':
-                    objective, residual = 'mstde', True
-
-                args['residual'] = residual
-                args['objective'] = objective
-
-                single_res = {k: args[k] for k in args_to_keep}
-                single_res['experiment'] = exp_dir.name + f'_{objective}'
-                single_res['objective'] = objective
-
-                final = logs['final']
-                final_measures = final[key]['measures']
-                if 'kitchen' in exp_dir.stem:
-                    # For now, we assume kitchen selection objective == mem learning objective
-                    final_mem_perf = np.einsum('ij,ij->i',
-                                               final_measures['values']['state_vals']['v'][:, i],
-                                               final_measures['values']['p0'][:, i])
-
-                else:
-                    final_mem_perf = np.einsum('ij,ij->i',
-                                               final_measures['values']['state_vals']['v'],
-                                               final_measures['values']['p0'])
-
-                for i in range(args['n_seeds']):
-                    all_results.append({
-                        **single_res,
-                        'seed': i,
-                        'init_policy_perf': init_policy_perf_seeds[i],
-                        'init_improvement_perf': init_improvement_perf_seeds[i],
-                        'final_mem_perf': final_mem_perf[i],
-                        'compare_to_perf': compare_to_perf,
-                    })
+            for i in range(args['n_seeds']):
+                all_results.append({
+                    **single_res,
+                    'seed': i,
+                    'init_policy_perf': init_policy_perf_seeds[i],
+                    'init_improvement_perf': init_improvement_perf_seeds[i],
+                    'final_mem_perf': final_mem_perf[i],
+                    'compare_to_perf': compare_to_perf,
+                })
 
     for exp_dir in exp_dirs:
         parse_exp_dir(exp_dir)
