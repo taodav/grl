@@ -31,7 +31,8 @@ from grl.loss import (
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
-    obs_space_mem_discrep_loss
+    obs_space_mem_discrep_loss,
+    mem_variance_loss
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
@@ -252,6 +253,8 @@ def make_experiment(args):
                 partial_kwargs['residual'] = residual
             elif objective == 'obs_space':
                 mem_loss_fn = obs_space_mem_discrep_loss
+            elif args.objective == 'variance':
+                mem_loss_fn = mem_variance_loss
 
             pi = jax.nn.softmax(pi_params, axis=-1)
             loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
