@@ -5,10 +5,10 @@ exp_name = Path(__file__).stem
 hparams = {
     'file_name':
         f'runs_{exp_name}.txt',
-    'entry': 'scripts/batch_run_kitchen_sinks_single_obj.py',
+    'entry': '-m scripts.batch_run_kitchen_sinks_single_obj',
     'args': [{
         'spec': [
-            'tiger-alt-start', 'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
+            '4x3.95',
             'cheese.95', 'network', 'shuttle.95', 'paint.95'
             # 'hallway'
             # 'bridge-repair',
