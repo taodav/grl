@@ -73,6 +73,7 @@ def discrep_loss(
     lambda_1_vals = {'v': lambda_1_v_vals, 'q': lambda_1_q_vals}
 
     diff = lambda_1_vals[value_type] - lambda_0_vals[value_type]
+    # TODO: undiscounted occupancy?
     c_s = info['occupancy'] * (1 - pomdp.terminal_mask)
     loss = weight_and_sum_discrep_loss(diff,
                                        c_s,

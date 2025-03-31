@@ -1,19 +1,39 @@
 import jax.numpy as jnp
 
 from grl.mdp import POMDP, MDP
-from grl.utils.mdp_solver import functional_get_occupancy, get_p_s_given_o, functional_create_td_model
+from grl.utils.mdp_solver import (
+    functional_get_occupancy, functional_get_undiscounted_occupancy,
+    get_p_s_given_o, functional_create_td_model
+)
+from grl.utils.policy_eval import functional_solve_mdp, functional_solve_pomdp
 
 def disc_count_loss(pi: jnp.ndarray,
                     pomdp: POMDP,
                     dist: str = 'diff'):
     pi_state = pomdp.phi @ pi
-    occupancy = functional_get_occupancy(pi_state, pomdp)
+    disc_occupancy = functional_get_occupancy(pi_state, pomdp)
+    undisc_occupancy = functional_get_undiscounted_occupancy(pi_state, pomdp)
 
-    p_pi_of_s_given_o = get_p_s_given_o(pomdp.phi, occupancy)
-    T_phi = pomdp.T @ pomdp.phi @ p_pi_of_s_given_o.T
-    td_pomdp = MDP(T_phi, pomdp.R, pomdp.p0, gamma=pomdp.gamma)
-    td_occupancy = functional_get_occupancy(pi_state, td_pomdp)
-    td_obs_occupancy = None
+    p_pi_of_s_given_o_undiscounted = get_p_s_given_o(pomdp.phi, undisc_occupancy)
+    T_phi_undisc = pomdp.T @ pomdp.phi @ p_pi_of_s_given_o_undiscounted.T
+    td_pomdp_undisc = MDP(T_phi_undisc, pomdp.R, pomdp.p0, gamma=pomdp.gamma)
+    disc_td_occupancy_over_undisc_T_phi = functional_get_occupancy(pi_state, td_pomdp_undisc)
+
+    p_pi_of_s_given_o_discounted = get_p_s_given_o(pomdp.phi, disc_occupancy)
+    T_phi_disc = pomdp.T @ pomdp.phi @ p_pi_of_s_given_o_discounted.T
+    td_pomdp_disc = MDP(T_phi_disc, pomdp.R, pomdp.p0, gamma=pomdp.gamma)
+    disc_td_occupancy = functional_get_occupancy(pi_state, td_pomdp_disc)
+
+    # test values here
+    v, q = functional_solve_mdp(pi_state, pomdp)
+
+    mc_vals_undisc_count = functional_solve_pomdp(q, p_pi_of_s_given_o_undiscounted, pi)
+
+    mc_vals_disc_count = functional_solve_pomdp(q, p_pi_of_s_given_o_discounted, pi)
+
+    T_obs_obs_undisc, R_obs_obs_undisc = functional_create_td_model(p_pi_of_s_given_o_undiscounted, pomdp)
+
+    print()
 
 
 def mem_disc_count_loss(

@@ -104,7 +104,6 @@ def get_args():
     parser.add_argument('--reward_in_obs', action='store_true',
                         help='Do we add reward into observation?')
 
-    # CURRENTLY NOT USED
     parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance'])
 
     parser.add_argument('--study_name', default=None, type=str,

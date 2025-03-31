@@ -100,6 +100,7 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9
 
     # Compute the state-action distribution as a diagonal matrix
     I = jnp.eye(sa)
+    # TODO: NOTE this occupancy is discounted occupancy too. We should have a switch for discounted/undiscounted
     occupancy_as = jnp.linalg.solve((I - gamma * P_as_as.T), as_0)
     mu = occupancy_as / jnp.sum(occupancy_as)
     D_mu = jnp.diag(mu)

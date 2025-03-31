@@ -11,7 +11,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from jax import random, value_and_grad
-from jax.config import config
+from jax import config
 from jax.debug import print
 from jax_tqdm import scan_tqdm
 import optax
@@ -22,6 +22,9 @@ from grl.memory import memory_cross_product
 from grl.utils.file_system import results_path, numpyify_and_save
 from grl.loss import (
     pg_objective_func,
+    discrep_loss,
+    mstd_err,
+    variance_loss,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
@@ -80,11 +83,10 @@ def get_args():
                         help='Do we use (l2 | abs) for our discrepancies?')
     parser.add_argument('--epsilon', default=0.1, type=float,
                         help='(POLICY ITERATION AND TMAZE_EPS_HYPERPARAMS ONLY) What epsilon do we use?')
+    parser.add_argument('--reward_in_obs', action='store_true',
+                        help='Do we add reward into observation?')
 
-    parser.add_argument('--objective', default='discrep', type=str,
-                        help='What objective do we use?')
-    parser.add_argument('--residual', action='store_true',
-                        help='For Bellman and TD errors, do we add the residual term?')
+    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance'])
 
     parser.add_argument('--log_every', default=500, type=int,
                         help='How many logs do we keep?')
@@ -101,6 +103,13 @@ def get_args():
     return args
 
 def make_experiment(args):
+
+    loss_map = {
+        'ld': discrep_loss,
+        'tde': mstd_err,
+        'tde_residual': mstd_err,
+        'variance': variance_loss
+    }
 
     # Get POMDP definition
     pomdp, pi_dict = load_pomdp(args.spec,

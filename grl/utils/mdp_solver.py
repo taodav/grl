@@ -16,6 +16,22 @@ def functional_get_occupancy(pi_ground: jnp.ndarray, mdp: Union[MDP, POMDP]):
     b = mdp.p0
     return jnp.linalg.solve(A, b)
 
+@jit
+def functional_get_undiscounted_occupancy(pi_ground: jnp.ndarray, mdp: Union[MDP, POMDP]):
+    Pi_pi = pi_ground.transpose()[..., None]
+    T_pi = (Pi_pi * mdp.T).sum(axis=0) # T^π(s'|s)
+
+    # Now we need to mask out terminal states
+    terminal_T_pi_mask = jnp.diag(mdp.terminal_mask)
+    T_pi = T_pi * (1 - terminal_T_pi_mask)
+
+    # A*C_pi(s) = b
+    # A = (I - \gamma (T^π)^T)
+    # b = P_0
+    A = jnp.eye(mdp.state_space.n) - T_pi.transpose()
+    b = mdp.p0
+    return jnp.linalg.solve(A, b)
+
 def pomdp_get_occupancy(pi: jnp.ndarray, pomdp: POMDP):
     pi_ground = pomdp.phi @ pi
     return functional_get_occupancy(pi_ground, pomdp)
