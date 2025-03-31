@@ -51,6 +51,7 @@ def obs_rew_gvf_lstd_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: 
     # Solve the linear system for Q(s,a), replacing the state features with state-action features
     #
     # See section 2 of https://arxiv.org/pdf/1511.08495.pdf
+    # TODO: change R here to R : O
     D_eps_ao = 1e-10 * jnp.eye(oa)
     phi_D_mu = phi_as_ao.T @ D_mu
     A = (phi_D_mu @ (I - gamma * P_as_as) @ jnp.linalg.solve(I - gamma * lambda_ * P_as_as,
