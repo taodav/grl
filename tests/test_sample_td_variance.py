@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 import numpy as np
+from jax_tqdm import scan_tqdm
 
 from grl.environment import load_pomdp
 from grl.environment.jax_pomdp import load_jax_pomdp, POMDP, LogWrapper, VecEnv
@@ -64,8 +65,9 @@ def make_collect_samples(env_str: str, env: POMDP,
     policy, pi = get_policy(env_str, epsilon=epsilon)
     vmap_policy = jax.vmap(policy)
 
+    @scan_tqdm(n_samples)
     def env_step(runner_state, step):
-        env_state, last_obs, last_done, rng = runner_state
+        env_state, last_obs, last_done, last_timestep, rng = runner_state
         state = env_state.env_state
 
         policy_rng, env_rng, rng = jax.random.split(rng, 3)
@@ -76,28 +78,34 @@ def make_collect_samples(env_str: str, env: POMDP,
         env_rngs = jax.random.split(rng, n_envs)
         obs, env_state, reward, done, info = env.step(env_rngs, env_state, action, env_params)
         next_obs = jnp.zeros_like(obs).at[-1].set(1) * done + (1 - done) * obs
+        next_timestep = (last_timestep + 1) * (1 - done)
         experience = {
             'obs': last_obs,
             'action': action,
             'reward': reward,
             'done': done,
             'state': state,
+            'timestep': last_timestep,
             'next_obs': next_obs
         }
-        runner_state = (env_state, obs, done, rng)
+        runner_state = (env_state, obs, done, next_timestep, rng)
 
         return runner_state, experience
 
+    @jax.jit
     def collect(rng):
         reset_rng, rng = jax.random.split(rng)
         reset_rngs = jax.random.split(rng, n_envs)
         obs, env_state = env.reset(reset_rngs, env_params)
 
         scan_rng, rng = random.split(rng)
-        init_runner_state = (env_state, obs, jnp.zeros((n_envs,), dtype=bool), scan_rng)
+        init_runner_state = (env_state,
+                             obs, jnp.zeros((n_envs,), dtype=bool),
+                             jnp.zeros((n_envs,), dtype=int),
+                             scan_rng)
 
         final_runner_state, experiences = jax.lax.scan(
-            env_step, init_runner_state, None, n_samples
+            env_step, init_runner_state, jnp.arange(n_samples), n_samples
         )
 
         # TODO: add a while not done here so that the end of the buffer is always on a done.
@@ -131,9 +139,9 @@ def make_collect_samples(env_str: str, env: POMDP,
 
 if __name__ == "__main__":
     # jax.disable_jit(True)
-    # env_str = 'tmaze_5_separate_goals_two_thirds_up'
+    env_str = 'tmaze_5_separate_goals_two_thirds_up'
     # env_str = 'counting_wall'
-    env_str = 'switching'
+    # env_str = 'switching'
 
     n_samples = int(1e6)
 
@@ -146,7 +154,7 @@ if __name__ == "__main__":
     collect_fn = make_collect_samples(env_str, pomdp, n_samples=n_samples)
 
     collect_rng, rng = jax.random.split(rng)
-
+    print("Collecting MC experiences")
     mc_experiences, info = collect_fn(collect_rng)
 
     def calc_vars_from_experience(experiences, pomdp):
@@ -196,20 +204,41 @@ if __name__ == "__main__":
     pomdp, pi_dict = load_pomdp(env_str,
                                 corridor_length=5,
                                 discount=0.)
-    variances, info = get_variances(info['pi'], pomdp)
+    pi = info['pi']
+    variances, info = get_variances(pi, pomdp)
 
-    td_mdp_spec = info['td_model']
-    td_mdp = POMDP(td_mdp_spec.T, td_mdp_spec.R, td_mdp_spec.p0, td_mdp_spec.gamma,
-                   np.eye(td_mdp_spec.state_space.n))
-    td_env = LogWrapper(td_mdp, gamma=td_mdp.gamma)
-    td_env = VecEnv(td_env)
+    # td_mdp_spec = info['td_model']
+    # td_mdp = POMDP(td_mdp_spec.T, td_mdp_spec.R, td_mdp_spec.p0, td_mdp_spec.gamma,
+    #                np.eye(td_mdp_spec.state_space.n))
+    # td_env = LogWrapper(td_mdp, gamma=td_mdp.gamma)
+    # td_env = VecEnv(td_env)
+    #
+    # collect_td_fn = make_collect_samples(env_str, td_env, n_samples=n_samples)
+    #
+    # collect_rng, rng = jax.random.split(rng)
+    #
+    # td_experiences, td_info = collect_td_fn(collect_rng)
+    # td_var_results = calc_vars_from_experience(td_experiences, td_env)
 
-    collect_td_fn = make_collect_samples(env_str, td_env, n_samples=n_samples)
+    # disc count tests
+    from grl.utils.mdp_solver import functional_get_occupancy, get_p_s_given_o
+    pi_state = pomdp.phi @ pi
+    disc_occupancy = functional_get_occupancy(pi_state, pomdp)
+
+    p_pi_of_s_given_o_discounted = get_p_s_given_o(pomdp.phi, disc_occupancy)
+    T_phi_disc = pomdp.T @ pomdp.phi @ p_pi_of_s_given_o_discounted.T
+
+    td_state_pomdp = POMDP(T_phi_disc, pomdp.R, pomdp.p0, pomdp.gamma,
+                           pomdp.phi)
+    td_state_env = LogWrapper(td_state_pomdp, gamma=pomdp.gamma)
+    td_state_env = VecEnv(td_state_env)
+
+    collect_state_td_fn = make_collect_samples(env_str, td_state_env, n_samples=n_samples)
 
     collect_rng, rng = jax.random.split(rng)
 
-    td_experiences, td_info = collect_td_fn(collect_rng)
-    td_var_results = calc_vars_from_experience(td_experiences, td_env)
+    print("Collecting state TD experiences")
+    td_state_experiences, td_state_info = collect_state_td_fn(collect_rng)
 
     print()
 

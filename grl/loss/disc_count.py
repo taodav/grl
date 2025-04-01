@@ -93,6 +93,6 @@ if __name__ == '__main__':
                             n_actions=env.action_space.n,
                             n_mem_states=n_mem)
 
-    # loss = disc_count_test(pi, env, dist='diff')
-    mem_loss = mem_disc_count_loss(mem_params, pi.repeat(n_mem, axis=0), env)
+    loss = disc_count_test(pi, env, dist='diff')
+    # mem_loss = mem_disc_count_loss(mem_params, pi.repeat(n_mem, axis=0), env)
     print()
