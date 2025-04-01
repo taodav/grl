@@ -33,7 +33,9 @@ from grl.loss import (
     mem_discrep_loss,
     mem_bellman_loss,
     obs_space_mem_discrep_loss,
-    mem_variance_loss
+    mem_variance_loss,
+    disc_count_loss,
+    mem_disc_count_loss
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
@@ -104,7 +106,7 @@ def get_args():
     parser.add_argument('--reward_in_obs', action='store_true',
                         help='Do we add reward into observation?')
 
-    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance'])
+    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance', 'disc_count'])
 
     parser.add_argument('--study_name', default=None, type=str,
                         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
@@ -139,7 +141,8 @@ def make_experiment(args):
         'ld': discrep_loss,
         'tde': mstd_err,
         'tde_residual': mstd_err,
-        'variance': variance_loss
+        'variance': variance_loss,
+        'disc_count': disc_count_loss
     }
 
     # Get POMDP definition
@@ -259,6 +262,8 @@ def make_experiment(args):
                 mem_loss_fn = obs_space_mem_discrep_loss
             elif args.objective == 'variance':
                 mem_loss_fn = mem_variance_loss
+            elif args.objective == 'disc_count':
+                mem_loss_fn = mem_disc_count_loss
 
             pi = jax.nn.softmax(pi_params, axis=-1)
             loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
@@ -284,7 +289,7 @@ def make_experiment(args):
         mem_input_tuple = (mem_params, mem_aug_pi_paramses, mem_tx_params)
 
         # Memory iteration for all of our measures
-        print("Starting {} iterations of {} minimization", args.mi_steps, args.objective)
+        print(f"Starting {args.mi_steps} iterations of {args.objective} minimization")
         updated_mem_out, (losses, all_mem_params) = jax.lax.scan(update_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
         updated_mem_paramses, ld_pi_paramses, _ = updated_mem_out
         updated_mem_info = {'mems': updated_mem_paramses,

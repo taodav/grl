@@ -6,5 +6,6 @@ from .state import mem_state_discrep
 from .td import mstd_err, mem_tde_loss
 from .value import value_error
 from .variance import variance_loss, mem_variance_loss
+from .disc_count import disc_count_loss, mem_disc_count_loss
 
 
