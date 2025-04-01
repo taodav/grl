@@ -25,7 +25,7 @@ hparams = {
         'optimizer': 'adam',
         'pi_lr': 0.01,
         'mi_lr': 0.01,
-        'n_mem_states': [2, 4],
+        'n_mem_states': 2,
         'n_seeds': 5,
         'platform': 'gpu',
         'seed': 2025,
