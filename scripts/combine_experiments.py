@@ -6,12 +6,24 @@ import orbax.checkpoint
 import numpy as np
 
 from grl.utils.file_system import load_info, numpyify_and_save
+from grl.utils.file_system import import_module_to_var
 
 from definitions import ROOT_DIR
 
 
+def find_file_in_dir(file_name: str, base_dir: Path) -> Path:
+    for path in base_dir.rglob('*'):
+        if file_name in str(path):
+            return path
+
 if __name__ == "__main__":
-    exp_dir = Path(ROOT_DIR, 'results', 'variance_pg_4_mem_states')
+    exp_dir = Path(ROOT_DIR, 'results', 'variance_pg_kitchen_4_mem_states')
+
+    hyperparams_dir = Path(ROOT_DIR, 'scripts', 'hyperparams').resolve()
+    study_hparam_filename = exp_dir.stem + '.py'
+    study_hparam_path = find_file_in_dir(study_hparam_filename, hyperparams_dir)
+
+    hparam = import_module_to_var(study_hparam_path, 'hparam')
 
     all_env_res = {}
 

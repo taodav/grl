@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
-import scipy.optimize
-from scipy.special import logsumexp, softmax
+# import scipy.optimize
+# from scipy.special import logsumexp, softmax
 
 from pprint import pformat
 from typing import Sequence, Union
@@ -63,44 +63,44 @@ def arg_boltzman(x, axis=-1, beta=1.):
     denom = np.sum(numer, axis=axis, keepdims=True)
     return (numer / denom)
 
-def mellowmax(x, axis=-1, beta=3.9):
-    n = x.shape[axis]
-    return (logsumexp(beta * x, axis=axis) - np.log(n)) / beta
-
-def arg_mellowmax(
-        x: np.ndarray,
-        axis: int = -1,
-        beta: float = 3.9,
-        beta_min: float = -10.0,
-        beta_max: float = 100.0,
-        normalize_axis: bool = True, # rescale values to between 0 and 1 before taking mellowmax
-):
-    if normalize_axis:
-        xmin = x.min(axis=axis, keepdims=True)
-        xmax = x.max(axis=axis, keepdims=True)
-        xrange = (xmax - xmin)
-        xrange[np.isclose(xrange, 0)] = 1
-        x = (x - xmin) / xrange
-    axis_last = np.moveaxis(x, axis, -1)
-    mm = mellowmax(axis_last, beta=beta, axis=-1)
-    batch_adv = axis_last - np.broadcast_to(np.expand_dims(mm, -1), axis_last.shape)
-    batch_beta = np.empty(mm.shape, dtype=float)
-
-    # Beta is computed as the root of this function
-    def f(y, adv):
-        return np.sum(np.exp(y * adv) * adv)
-
-    for idx in np.ndindex(mm.shape):
-        idx_full = idx + (slice(None), )
-        adv = batch_adv[idx_full]
-        try:
-            beta = scipy.optimize.brentq(f, a=beta_min, b=beta_max, args=(adv, ))
-        except ValueError:
-            beta = 0
-        batch_beta[idx] = beta
-
-    softmax_last = softmax(np.expand_dims(np.asarray(batch_beta), -1) * axis_last, axis=-1)
-    return np.moveaxis(softmax_last, -1, axis)
+# def mellowmax(x, axis=-1, beta=3.9):
+#     n = x.shape[axis]
+#     return (logsumexp(beta * x, axis=axis) - np.log(n)) / beta
+#
+# def arg_mellowmax(
+#         x: np.ndarray,
+#         axis: int = -1,
+#         beta: float = 3.9,
+#         beta_min: float = -10.0,
+#         beta_max: float = 100.0,
+#         normalize_axis: bool = True, # rescale values to between 0 and 1 before taking mellowmax
+# ):
+#     if normalize_axis:
+#         xmin = x.min(axis=axis, keepdims=True)
+#         xmax = x.max(axis=axis, keepdims=True)
+#         xrange = (xmax - xmin)
+#         xrange[np.isclose(xrange, 0)] = 1
+#         x = (x - xmin) / xrange
+#     axis_last = np.moveaxis(x, axis, -1)
+#     mm = mellowmax(axis_last, beta=beta, axis=-1)
+#     batch_adv = axis_last - np.broadcast_to(np.expand_dims(mm, -1), axis_last.shape)
+#     batch_beta = np.empty(mm.shape, dtype=float)
+#
+#     # Beta is computed as the root of this function
+#     def f(y, adv):
+#         return np.sum(np.exp(y * adv) * adv)
+#
+#     for idx in np.ndindex(mm.shape):
+#         idx_full = idx + (slice(None), )
+#         adv = batch_adv[idx_full]
+#         try:
+#             beta = scipy.optimize.brentq(f, a=beta_min, b=beta_max, args=(adv, ))
+#         except ValueError:
+#             beta = 0
+#         batch_beta[idx] = beta
+#
+#     softmax_last = softmax(np.expand_dims(np.asarray(batch_beta), -1) * axis_last, axis=-1)
+#     return np.moveaxis(softmax_last, -1, axis)
 
 def euclidian_dist(arr1: np.ndarray, arr2: np.ndarray):
     return jnp.linalg.norm(arr1 - arr2, 2)
