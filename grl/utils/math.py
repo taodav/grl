@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 # import scipy.optimize
-# from scipy.special import logsumexp, softmax
+from scipy.special import logsumexp, softmax
 
 from pprint import pformat
 from typing import Sequence, Union

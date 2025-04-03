@@ -38,13 +38,13 @@ belief_perf = {
 # ]
 
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'variance_pg'),
+    Path(ROOT_DIR, 'results', 'variance_pg_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
 pomdp_files_dir = Path(ROOT_DIR, 'grl', 'environment', 'pomdp_files')
 
-args_to_keep = ['spec', 'n_mem_states', 'seed', 'alpha', 'residual', 'objective']
+args_to_keep = ['spec', 'n_mem_states', 'seed', 'alpha', 'objective']
 split_by = [arg for arg in args_to_keep if arg != 'seed'] + ['experiment']
 
 # this option allows us to compare to either the optimal belief state soln
@@ -55,9 +55,9 @@ spec_plot_order = [
     'network',
     'paint.95',
     '4x3.95', 'tiger-alt-start',
-    # 'shuttle.95',
+    'shuttle.95',
     'cheese.95', 'tmaze_5_two_thirds_up',
-    'parity_check'
+    # 'parity_check'
 ]
 
 # plot_key = 'final_memoryless_optimal_perf'  # for batch_run
@@ -89,7 +89,7 @@ all_res_df = parse_batch_dirs(experiment_dirs,
 residual = False
 alpha = 1.
 filtered_df = all_res_df[
-(all_res_df['residual'] == residual) &
+# (all_res_df['residual'] == residual) &
 (all_res_df['alpha'] == alpha)
 ].reset_index()
 

@@ -81,17 +81,19 @@ def parse_batch_dirs(exp_dirs: list[Path],
             single_res['objective'] = objective
 
             final = logs['final']
+            if 'improved_mem' in final:
+                final = final['improved_mem']
             final_measures = final['measures']
-            if 'kitchen' in exp_dir.stem:
-                # For now, we assume kitchen selection objective == mem learning objective
-                final_mem_perf = np.einsum('ij,ij->i',
-                                           final_measures['values']['state_vals']['v'][:, i],
-                                           final_measures['values']['p0'][:, i])
-
-            else:
-                final_mem_perf = np.einsum('ij,ij->i',
-                                           final_measures['values']['state_vals']['v'],
-                                           final_measures['values']['p0'])
+            # if 'kitchen' in exp_dir.stem:
+            #     # For now, we assume kitchen selection objective == mem learning objective
+            #     final_mem_perf = np.einsum('ij,ij->i',
+            #                                final_measures['values']['state_vals']['v'][:, i],
+            #                                final_measures['values']['p0'][:, i])
+            #
+            # else:
+            final_mem_perf = np.einsum('ij,ij->i',
+                                       final_measures['values']['state_vals']['v'],
+                                       final_measures['values']['p0'])
 
             for i in range(args['n_seeds']):
                 all_results.append({
