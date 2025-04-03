@@ -76,7 +76,8 @@ def get_args():
 
     parser.add_argument('--alpha', default=1., type=float,
                         help='Temperature parameter, for how uniform our lambda-discrep weighting is')
-    parser.add_argument('--lr', default=0.01, type=float)
+    parser.add_argument('--pi_lr', default=0.01, type=float)
+    parser.add_argument('--mi_lr', default=0.01, type=float)
     parser.add_argument('--value_type', default='q', type=str,
                         help='Do we use (v | q) for our discrepancies?')
     parser.add_argument('--error_type', default='l2', type=str,
@@ -158,10 +159,11 @@ def make_experiment(args):
         mem_aug_pi_params = pi_params.repeat(mem_params.shape[-1], axis=0)
         info['beginning'] = beginning_info
 
-        optim = get_optimizer(args.optimizer, args.lr)
+        pi_optim = get_optimizer(args.optimizer, args.pi_lr)
+        mi_optim = get_optimizer(args.optimizer, args.mi_lr)
 
-        mem_tx_params = optim.init(mem_params)
-        pi_tx_params = optim.init(mem_aug_pi_params)
+        mem_tx_params = mi_optim.init(mem_params)
+        pi_tx_params = pi_optim.init(mem_aug_pi_params)
 
         def update_pg_step(params, tx_params, pomdp):
             outs, params_grad = value_and_grad(pg_objective_func, has_aux=True)(params, pomdp)
@@ -170,7 +172,7 @@ def make_experiment(args):
             # We add a negative here to params_grad b/c we're trying to
             # maximize the PG objective (value of start state).
             params_grad = -params_grad
-            updates, tx_params = optim.update(params_grad, tx_params, params)
+            updates, tx_params = pi_optim.update(params_grad, tx_params, params)
             params = optax.apply_updates(params, updates)
             outs = (params, tx_params, pomdp)
             return outs, {'v0': v_0, 'v': td_v_vals, 'q': td_q_vals}
@@ -187,7 +189,7 @@ def make_experiment(args):
             return outs, info
 
         print("Finding memoryless optimal policy")
-        memoryless_pi_tx_params = optim.init(pi_params)
+        memoryless_pi_tx_params = pi_optim.init(pi_params)
         memoryless_pi_improvement_outs, memoryless_pi_improvement_info = \
             jax.lax.scan(policy_improvement_scan_wrapper, (pi_params, memoryless_pi_tx_params, pomdp),
                          jnp.arange(args.mi_steps), length=args.mi_steps)
@@ -212,7 +214,7 @@ def make_experiment(args):
                 pi = jax.nn.softmax(pi_params, axis=-1)
                 loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
 
-                updates, mem_tx_params = optim.update(params_grad, mem_tx_params, mem_params)
+                updates, mem_tx_params = mi_optim.update(params_grad, mem_tx_params, mem_params)
                 new_mem_params = optax.apply_updates(mem_params, updates)
 
                 return new_mem_params, pi_params, mem_tx_params, loss

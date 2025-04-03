@@ -20,7 +20,6 @@ hparams = {
         'objective': ['variance', 'ld'],
         # 'objective': ['ld', 'obs_space'],
         'mi_steps': 20000,
-        'pi_steps': 10000,
         'reward_in_obs': True,
         'optimizer': 'adam',
         'pi_lr': 0.01,
