@@ -118,7 +118,8 @@ def make_experiment(args):
                                 n_mem_states=args.n_mem_states,
                                 corridor_length=args.tmaze_corridor_length,
                                 discount=args.tmaze_discount,
-                                junction_up_pi=args.tmaze_junction_up_pi)
+                                junction_up_pi=args.tmaze_junction_up_pi,
+                                reward_in_obs=args.reward_in_obs)
 
     partial_kwargs = {
         'value_type': args.value_type,

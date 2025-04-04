@@ -38,7 +38,7 @@ belief_perf = {
 # ]
 
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'variance_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'variance_pg_interleave'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -181,16 +181,18 @@ fig, ax = plt.subplots(figsize=(12, 6))
 xlabels = [maybe_spec_map(l) for l in specs]
 x = np.arange(len(specs))
 
-init_improvement_perf_mean = np.array(all_means[
-                                        (all_means['n_mem_states'] == num_n_mem[0]) &
-                                        (all_means['experiment'] == experiments[0]) &
-                                        (all_means['objective'] == objectives[0])
-                                        ]['init_improvement_perf'])
-init_improvement_perf_std = np.array(all_std_errs[
-                                        (all_std_errs['n_mem_states'] == num_n_mem[0]) &
-                                        (all_std_errs['experiment'] == experiments[0]) &
-                                        (all_std_errs['objective'] == objectives[0])
-                                        ]['init_improvement_perf'])
+example_means = all_means[
+                          (all_means['n_mem_states'] == num_n_mem[0]) &
+                          (all_means['experiment'] == experiments[0]) &
+                          (all_means['objective'] == objectives[0])
+                          ]
+init_improvement_perf_mean = np.array([example_means[example_means['spec'] == spec]['init_improvement_perf'].item() for spec in specs])
+example_std = all_std_errs[
+                           (all_std_errs['n_mem_states'] == num_n_mem[0]) &
+                           (all_std_errs['experiment'] == experiments[0]) &
+                           (all_std_errs['objective'] == objectives[0])
+                           ]
+init_improvement_perf_std = np.array([example_std[example_std['spec'] == spec]['init_improvement_perf'].item() for spec in specs])
 
 ax.bar(x + 0 * exp_group_width + (0 + 1) * bar_width,
        init_improvement_perf_mean,
