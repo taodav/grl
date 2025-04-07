@@ -1,3 +1,5 @@
+import jax.numpy as jnp
+
 from .bellman import bellman_loss, mem_bellman_loss
 from .disc_count import disc_count_loss, mem_disc_count_loss
 from .gvf import gvf_loss, mem_gvf_loss
@@ -10,3 +12,9 @@ from .value import value_error
 from .variance import variance_loss, mem_variance_loss
 
 
+def mem_dummy_loss(mem_params, pi, pomdp, **kwargs):
+    return jnp.array(0, dtype=float)
+
+
+def dummy_loss(pi, pomdp, **kwargs):
+    return jnp.array(0, dtype=float), None, None

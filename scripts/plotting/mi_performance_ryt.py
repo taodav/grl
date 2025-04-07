@@ -38,7 +38,7 @@ belief_perf = {
 # ]
 
 experiment_dirs = [
-    Path(ROOT_DIR, 'results', 'variance_pg_interleave'),
+    Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -203,11 +203,15 @@ ax.bar(x + 0 * exp_group_width + (0 + 1) * bar_width,
 
 mem_colors = ['#E0B625', '#DD8453', '#C44E52']
 exp_hatches = ['/', 'o', '+', '.']
+objectives = []
 
 for i, exp_name in enumerate(experiments):
     means = sorted_mean_df[sorted_mean_df['experiment'] == exp_name]
     std_errs = sorted_std_err_df[sorted_std_err_df['experiment'] == exp_name]
 
+    objs = means['objective'].unique()
+    assert len(objs) == 1
+    objectives.append(objs[0])
     # means = sorted_mean_df
     # std_errs = sorted_std_err_df
 
@@ -233,7 +237,7 @@ ax.set_xticklabels(xlabels)
 # ax.set_title(f"Memory Iteration ({policy_optim_alg})")
 # alpha_str = 'uniform' if alpha == 1. else 'occupancy'
 residual_str = 'semi_grad' if not residual else 'residual'
-title_str = " vs. ".join([f"{exp} ({hatch})" for exp, hatch in zip(experiments, exp_hatches)]) + f"\n residual: {residual_str}, init_policy: {plot_key}"
+title_str = " vs. ".join([f"{obj} ({hatch})" for obj, hatch in zip(objectives, exp_hatches)])
 # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
 ax.set_title(title_str)
 

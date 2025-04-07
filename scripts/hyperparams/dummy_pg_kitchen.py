@@ -17,7 +17,7 @@ hparams = {
         'value_type': 'q',
         'error_type': 'l2',
         'alpha': 1.,
-        'objective': ['gvf_obs_rew', 'gvf_obs'],
+        'objective': 'dummy',
         # 'objective': ['ld', 'obs_space'],
         'mi_steps': 20000,
         'pi_steps': 10000,

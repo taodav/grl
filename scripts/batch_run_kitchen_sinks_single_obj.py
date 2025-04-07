@@ -37,7 +37,9 @@ from grl.loss import (
     disc_count_loss,
     mem_disc_count_loss,
     gvf_loss,
-    mem_gvf_loss
+    mem_gvf_loss,
+    dummy_loss,
+    mem_dummy_loss
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
@@ -109,7 +111,7 @@ def get_args():
                         help='Do we add reward into observation?')
 
     parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance', 'disc_count',
-                                                              'gvf_obs_rew', 'gvf_obs'])
+                                                              'gvf_obs_rew', 'gvf_obs', 'dummy'])
 
     parser.add_argument('--study_name', default=None, type=str,
                         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
@@ -148,6 +150,7 @@ def make_experiment(args):
         'disc_count': disc_count_loss,
         'gvf_obs_rew': partial(gvf_loss, projection='obs_rew'),
         'gvf_obs': partial(gvf_loss, projection='obs'),
+        'dummy': dummy_loss,
     }
 
     # Get POMDP definition
@@ -278,6 +281,8 @@ def make_experiment(args):
                 raise NotImplementedError
                 random_rew_key, self.rand_key = random.split(self.rand_key)
                 # random_reward = random.normal(random_rew_key, shape=)
+            elif args.objective == 'dummy':
+                mem_loss_fn = mem_dummy_loss
 
             mem_loss_fn = partial(mem_loss_fn, **partial_kwargs)
 
