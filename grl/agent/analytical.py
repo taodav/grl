@@ -12,7 +12,7 @@ from grl.utils.policy import construct_aug_policy
 from grl.loss import policy_discrep_loss, pg_objective_func, \
     mem_pg_objective_func, unrolled_mem_pg_objective_func
 from grl.loss import mem_discrep_loss, mem_bellman_loss, mem_tde_loss, obs_space_mem_discrep_loss, mem_disc_count_loss
-from grl.loss import mem_variance_loss
+from grl.loss import mem_variance_loss, mem_gvf_loss
 from grl.utils.math import glorot_init, reverse_softmax
 from grl.utils.optimizer import get_optimizer
 from grl.vi import policy_iteration_step
@@ -167,6 +167,16 @@ class AnalyticalAgent:
                 mem_loss_fn = mem_variance_loss
             elif self.objective == 'disc_count':
                 mem_loss_fn = mem_disc_count_loss
+            elif self.objective == 'gvf_obs_rew':
+                mem_loss_fn = mem_gvf_loss
+                partial_kwargs['projection'] = 'obs_rew'
+            elif self.objective == 'gvf_obs':
+                mem_loss_fn = mem_gvf_loss
+                partial_kwargs['projection'] = 'obs'
+            elif self.objective == 'gvf_random_rew':
+                raise NotImplementedError
+                random_rew_key, self.rand_key = random.split(self.rand_key)
+                # random_reward = random.normal(random_rew_key, shape=)
 
         partial_mem_discrep_loss = partial(mem_loss_fn, **partial_kwargs)
         self.memory_objective_func = jit(partial_mem_discrep_loss)

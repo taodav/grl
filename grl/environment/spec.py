@@ -3,6 +3,8 @@ import inspect
 from pathlib import Path
 from typing import Tuple
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from definitions import ROOT_DIR
@@ -193,4 +195,11 @@ def load_pomdp(name: str,
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'], rand_key=rand_key)
     pomdp = POMDP(mdp, spec['phi'])
     return pomdp, {'Pi_phi': spec['Pi_phi'], 'Pi_phi_x': spec['Pi_phi_x']}
+
+
+# def load_vec_gamma_pomdp(name: str,
+#                          rand_key: jax.random.PRNGKey,
+#                          reward_in_obs: bool = False,
+#                          obs_gammas: jnp.array = None,
+#                          **kwargs):
 

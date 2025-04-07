@@ -40,6 +40,8 @@ if __name__ == '__main__':
     # yapf:disable
     parser.add_argument('--spec', default='tmaze_5_two_thirds_up', type=str,
         help='name of POMDP spec; evals Pi_phi policies by default')
+    parser.add_argument('--reward_in_obs', action='store_true',
+                        help='are rewards in observation?')
     parser.add_argument('--mi_iterations', type=int, default=1,
                         help='For memory iteration, how many iterations of memory iterations do we do?')
     parser.add_argument('--mi_steps', type=int, default=20000,
@@ -75,7 +77,8 @@ if __name__ == '__main__':
     parser.add_argument('--error_type', default='l2', type=str,
                         help='Do we use (l2 | abs) for our discrepancies?')
     parser.add_argument('--objective', default='discrep', type=str,
-                        help='What objective are we trying to optimize? (discrep | bellman | tde | obs_space | variance)')
+                        help='What objective are we trying to optimize? '
+                             '(discrep | bellman | tde | obs_space | variance | gvf_obs_rew | gvf_obs)')
     parser.add_argument('--residual', action='store_true',
                         help='For Bellman and TD errors, do we add the residual term?')
     parser.add_argument('--lr', default=1, type=float)
@@ -127,7 +130,8 @@ if __name__ == '__main__':
                                 discount=args.tmaze_discount,
                                 junction_up_pi=args.tmaze_junction_up_pi,
                                 epsilon=args.epsilon,
-                                mem_leakiness=args.mem_leakiness)
+                                mem_leakiness=args.mem_leakiness,
+                                reward_in_obs=args.reward_in_obs)
 
     mem_params = get_memory(args.use_memory,
                             n_obs=pomdp.observation_space.n,

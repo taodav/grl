@@ -35,7 +35,9 @@ from grl.loss import (
     obs_space_mem_discrep_loss,
     mem_variance_loss,
     disc_count_loss,
-    mem_disc_count_loss
+    mem_disc_count_loss,
+    gvf_loss,
+    mem_gvf_loss
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
@@ -106,7 +108,8 @@ def get_args():
     parser.add_argument('--reward_in_obs', action='store_true',
                         help='Do we add reward into observation?')
 
-    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance', 'disc_count'])
+    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance', 'disc_count',
+                                                              'gvf_obs_rew', 'gvf_obs'])
 
     parser.add_argument('--study_name', default=None, type=str,
                         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
@@ -142,7 +145,9 @@ def make_experiment(args):
         'tde': mstd_err,
         'tde_residual': mstd_err,
         'variance': variance_loss,
-        'disc_count': disc_count_loss
+        'disc_count': disc_count_loss,
+        'gvf_obs_rew': partial(gvf_loss, projection='obs_rew'),
+        'gvf_obs': partial(gvf_loss, projection='obs'),
     }
 
     # Get POMDP definition
@@ -153,7 +158,6 @@ def make_experiment(args):
                                 discount=args.tmaze_discount,
                                 junction_up_pi=args.tmaze_junction_up_pi,
                                 reward_in_obs=args.reward_in_obs)
-
 
 
     def experiment(rng: random.PRNGKey):
@@ -264,6 +268,18 @@ def make_experiment(args):
                 mem_loss_fn = mem_variance_loss
             elif args.objective == 'disc_count':
                 mem_loss_fn = mem_disc_count_loss
+            elif args.objective == 'gvf_obs_rew':
+                mem_loss_fn = mem_gvf_loss
+                partial_kwargs['projection'] = 'obs_rew'
+            elif args.objective == 'gvf_obs':
+                mem_loss_fn = mem_gvf_loss
+                partial_kwargs['projection'] = 'obs'
+            elif args.objective == 'gvf_random_rew':
+                raise NotImplementedError
+                random_rew_key, self.rand_key = random.split(self.rand_key)
+                # random_reward = random.normal(random_rew_key, shape=)
+
+            mem_loss_fn = partial(mem_loss_fn, **partial_kwargs)
 
             pi = jax.nn.softmax(pi_params, axis=-1)
             loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
