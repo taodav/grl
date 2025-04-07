@@ -6,6 +6,8 @@ from typing import Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.stats import norm
+
 
 from definitions import ROOT_DIR
 from grl.environment.pomdp_file import POMDPFile
@@ -197,9 +199,48 @@ def load_pomdp(name: str,
     return pomdp, {'Pi_phi': spec['Pi_phi'], 'Pi_phi_x': spec['Pi_phi_x']}
 
 
-# def load_vec_gamma_pomdp(name: str,
-#                          rand_key: jax.random.PRNGKey,
-#                          reward_in_obs: bool = False,
-#                          obs_gammas: jnp.array = None,
-#                          **kwargs):
+def augment_pomdp_gamma(pomdp: POMDP,
+                        rand_key: jax.random.PRNGKey,
+                        augmentation: str = 'uniform',  # uniform | normal
+                        scale: float = None):
+    pomdp = deepcopy(pomdp)
+    """
+    TODO: these augmentations assume observation-conditioned gammas, but 
+    we implement them as state-conditioned gammas
+    """
+
+    o = pomdp.observation_space.n
+
+    if augmentation == 'uniform':
+        obs_gammas = jax.random.uniform(rand_key, shape=(o, ), minval=0, maxval=1)
+    elif augmentation == 'normal':
+        mean = 0.0
+        std = 1.0
+        low, high = -1.0, 1.0
+
+        # Compute CDF bounds
+        cdf_low = norm.cdf(low, loc=mean, scale=std)
+        cdf_high = norm.cdf(high, loc=mean, scale=std)
+
+        # Sample uniform values between the CDF bounds
+        u = jax.random.uniform(rand_key, shape=(o,), minval=cdf_low, maxval=cdf_high)
+
+        # Invert the CDF to get samples from the truncated normal
+        obs_gammas = norm.ppf(u, loc=mean, scale=std)
+    else:
+        raise NotImplementedError
+
+    if scale is not None:
+        raise NotImplementedError
+
+    # now we need to map obs_gammas to state_gammas
+    state_phi_occupancy = (pomdp.phi > 0).astype(float)  # S x O
+    state_gammas = state_phi_occupancy @ obs_gammas
+
+    pomdp.gamma = state_gammas
+    return pomdp
+
+
+
+
 

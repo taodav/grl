@@ -19,6 +19,7 @@ import optax
 
 from grl.agent.analytical import new_pi_over_mem
 from grl.environment import load_pomdp
+from grl.environment.spec import augment_pomdp_gamma
 from grl.mdp import POMDP
 from grl.utils.lambda_discrep import log_all_measures, augment_and_log_all_measures
 from grl.memory import memory_cross_product
@@ -80,6 +81,9 @@ def get_args():
                         help='policy improvement algorithm to use. "policy_iter" - policy iteration, "policy_grad" - policy gradient, '
                              '"discrep_max" - discrepancy maximization, "discrep_min" - discrepancy minimization')
 
+    parser.add_argument('--gamma_type', default='fixed', choices=['fixed', 'uniform', 'normal'],
+                        help='Do we use observation-based gammas? (fixed | uniform | normal)')
+
     parser.add_argument('--optimizer', type=str, default='adam',
                         help='What optimizer do we use? (sgd | adam | rmsprop)')
 
@@ -140,7 +144,7 @@ def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
     return policies[jnp.argmax(all_policy_measures)]
 
 
-def make_experiment(args):
+def make_experiment(args, rand_key: jax.random.PRNGKey):
 
     loss_map = {
         'ld': discrep_loss,
@@ -162,6 +166,12 @@ def make_experiment(args):
                                 junction_up_pi=args.tmaze_junction_up_pi,
                                 reward_in_obs=args.reward_in_obs)
 
+    pomdp_for_mem_optim = pomdp
+    if args.gamma_type != 'fixed':
+        rand_key, augment_gamma_key = jax.random.split(rand_key)
+        pomdp_for_mem_optim = augment_pomdp_gamma(pomdp, augment_gamma_key, augmentation=args.gamma_type)
+
+
 
     def experiment(rng: random.PRNGKey):
         info = {}
@@ -179,6 +189,9 @@ def make_experiment(args):
 
         beginning_info['pi_params'] = pi_paramses.copy()
         beginning_info['measures'] = batch_log_all_measures(pomdp, pi_paramses)
+        # TODO:
+        # if args.gamma_type != 'fixed':
+        #     beginning_info['gamma_dependent_measures'] = batch_log_all_measures(pomdp_for_mem_optim, pi_paramses)
         info['beginning'] = beginning_info
 
         # mem_aug_pi_paramses =
@@ -287,7 +300,7 @@ def make_experiment(args):
             mem_loss_fn = partial(mem_loss_fn, **partial_kwargs)
 
             pi = jax.nn.softmax(pi_params, axis=-1)
-            loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
+            loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp_for_mem_optim)
 
             updates, mem_tx_params = mi_optim.update(params_grad, mem_tx_params, mem_params)
             new_mem_params = optax.apply_updates(mem_params, updates)
@@ -315,7 +328,7 @@ def make_experiment(args):
         updated_mem_paramses, ld_pi_paramses, _ = updated_mem_out
         updated_mem_info = {'mems': updated_mem_paramses,
                             'all_mem_params': all_mem_params[::args.save_mem_freq],
-                            'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_pi_paramses)}
+                            'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp_for_mem_optim, ld_pi_paramses)}
 
         info['after_mem_op'] = updated_mem_info
 
@@ -365,7 +378,7 @@ def make_experiment(args):
 
 if __name__ == "__main__":
     start_time = time()
-    # jax.disable_jit(True)
+    jax.disable_jit(True)
 
     args = get_args()
 
@@ -377,8 +390,10 @@ if __name__ == "__main__":
     rngs = random.split(rng, args.n_seeds + 1)
     rng, exp_rngs = rngs[-1], rngs[:-1]
 
+    rng, make_rng = jax.random.split(rng)
+
     t0 = time()
-    experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args)))
+    experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
 
     # Run the experiment!
     # results will be batched over (n_seeds, random_policies + 1).

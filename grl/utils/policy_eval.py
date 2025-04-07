@@ -85,6 +85,8 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9
     oa = o * a
 
     gamma = pomdp.gamma
+    if isinstance(pomdp.gamma, jnp.ndarray):
+        gamma = pomdp.gamma.repeat(a)[..., None]  # sa x 1
     s0 = pomdp.p0
 
     pi_sa = phi @ pi

@@ -58,7 +58,7 @@ def gvf_loss(pi: jnp.ndarray,
 
     # We can calculate the gvf loss by projecting the difference between the two SRs,
     # as per the generalized LD document.
-    sr_diff = sr_as_as_0 - sr_as_as_1
+    sr_diff = jnp.abs(sr_as_as_0 - sr_as_as_1)
 
     if projection == 'obs_rew':
         proj = jnp.concatenate((phi_as_ao, R_as[..., None]), axis=-1)
