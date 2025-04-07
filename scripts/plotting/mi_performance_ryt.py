@@ -38,6 +38,8 @@ belief_perf = {
 # ]
 
 experiment_dirs = [
+    Path(ROOT_DIR, 'results', 'dummy_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'ld_pg_kitchen'),
     Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
 ]
 
@@ -57,6 +59,7 @@ spec_plot_order = [
     '4x3.95', 'tiger-alt-start',
     'shuttle.95',
     'cheese.95', 'tmaze_5_two_thirds_up',
+    'parity_check'
     # 'parity_check'
 ]
 
@@ -169,14 +172,20 @@ objectives = normalized_df['objective'].unique()
 
 group_width = 1
 num_n_mem = list(sorted(normalized_df['n_mem_states'].unique()))
+n_mem = len(num_n_mem)
+n_exp = len(experiments)
+
 specs = sorted_mean_df['spec'].unique()
 
 spec_order_mapping = np.arange(len(specs), dtype=int)
 
-exp_group_width = group_width / (len(experiments))
-bar_width = exp_group_width / (len(num_n_mem) + 3)
 
-fig, ax = plt.subplots(figsize=(12, 6))
+# this was calculated so that there's bar_width / 2 space between subgroups
+bar_width = group_width / (1 + (n_mem + 0.5) * n_exp + 1.5)
+between_groups_width = bar_width / 2
+
+
+fig, ax = plt.subplots(figsize=(20, 8))
 
 xlabels = [maybe_spec_map(l) for l in specs]
 x = np.arange(len(specs))
@@ -194,7 +203,7 @@ example_std = all_std_errs[
                            ]
 init_improvement_perf_std = np.array([example_std[example_std['spec'] == spec]['init_improvement_perf'].item() for spec in specs])
 
-ax.bar(x + 0 * exp_group_width + (0 + 1) * bar_width,
+ax.bar(x,
        init_improvement_perf_mean,
        bar_width,
        yerr=init_improvement_perf_std,
@@ -211,16 +220,18 @@ for i, exp_name in enumerate(experiments):
 
     objs = means['objective'].unique()
     assert len(objs) == 1
-    objectives.append(objs[0])
+    objective = objs[0]
+    if objective == 'dummy':
+        objective = 'random'
+    objectives.append(objective)
     # means = sorted_mean_df
     # std_errs = sorted_std_err_df
 
     for j, n_mem_states in enumerate(num_n_mem):
         curr_mem_mean = np.array(means[means['n_mem_states'] == n_mem_states][plot_key])
         curr_mem_std = np.array(std_errs[std_errs['n_mem_states'] == n_mem_states][plot_key])
-        to_add = i * exp_group_width + (j + 3) * bar_width
-        if i != 0:
-            to_add -= 2 * bar_width
+
+        to_add = bar_width + (i + 1) * between_groups_width + (n_mem * bar_width) * i + bar_width * j
         ax.bar(x + to_add,
                curr_mem_mean,
                bar_width,
@@ -240,6 +251,7 @@ residual_str = 'semi_grad' if not residual else 'residual'
 title_str = " vs. ".join([f"{obj} ({hatch})" for obj, hatch in zip(objectives, exp_hatches)])
 # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
 ax.set_title(title_str)
+fig.tight_layout()
 
 plt.show()
 downloads = Path().home() / 'Downloads'
