@@ -106,84 +106,47 @@ def calculate_sr(
 
     I_S = jnp.eye(n_states)
     I_A = jnp.eye(n_actions)
-    I_O = jnp.eye(n_obs)
-    I_SA = jnp.eye(n_actions * n_states).reshape((n_states, n_actions, n_states, n_actions))
-    Phi_A = kron(Phi, I_A)
+    # I_SA = jnp.eye(n_actions * n_states).reshape((n_states, n_actions, n_states, n_actions))
+    # Phi_A = kron(Phi, I_A)
 
-    pi_s = dot(Phi, pi)
-    assert is_prob_matrix(pi_s, (n_states, n_actions))
-    T_pi = np.einsum("ik,ikj->ij", pi_s, T)
-    assert is_subprob_matrix(T_pi, (n_states, n_states))
-    Pi = np.eye(len(pi))[..., None] * pi[None, ...]
-    Pi_s = np.eye(len(pi_s))[..., None] * pi_s[None, ...]
+    pi_s = Phi @ pi
 
-    # Pr_s = np.ones(n_states) / n_states
-    c_s = np.linalg.solve(I_S - gamma * T_pi.T, p0)
+    T_pi = jnp.einsum("ik,ikj->ij", pi_s, T)
 
-    # Pr_s = np.linalg.inv(I_S - gamma * T_pi.T).dot(p0)
-    # Pr_s = np.random.random(n_states)
+    Pi = jnp.eye(len(pi))[..., None] * pi[None, ...]
 
-    Pr_s = c_s / np.sum(c_s)
-    # Pr_s[0] = (Pr_s[0] + Pr_s[1] + Pr_s[2] + Pr_s[3]) / 4
-    # Pr_s[1] = Pr_s[0]
-    # Pr_s[2] = Pr_s[0]
-    # Pr_s[3] = Pr_s[0]
+    c_s = jnp.linalg.solve(I_S - gamma * T_pi.T, p0)
 
-    # W = np.zeros((n_obs, n_states))
-    # for i in range(n_obs):
-    #     for j in range(n_states):
-    #         pr_i = np.sum([Pr_s[k] * Phi[k][i] for k in range(n_states)])
-    #         if np.isclose(pr_i, 0.0):
-    #             # this observation is never dispensed...
-    #             continue
-    #         W[i, j] = (
-    #                 Pr_s[j] * Phi[j][i] / pr_i
-    #         )
+    Pr_s = c_s / jnp.sum(c_s)
 
-    W_unnorm = np.einsum('i,ij->ji', Pr_s, Phi)
+    W_unnorm = jnp.einsum('i,ij->ji', Pr_s, Phi)
     W = W_unnorm / W_unnorm.sum(axis=-1, keepdims=True)
 
-    # TODO: simplify this
-    W_Pi = np.einsum('ijk,jklm->ilm', Pi, kron(W, I_A))
-    # W_Pi = ddot(Pi, kron(W, I_A))
+    W_Pi = jnp.einsum('ijk,jklm->ilm', Pi, kron(W, I_A))
 
-    SR_MC_SS = np.linalg.inv(I_S - gamma * T_pi)
+    SR_MC_SS = jnp.linalg.inv(I_S - gamma * T_pi)
 
-    W_phi_Pi = np.einsum('ij,jkl->ikl', Phi, W_Pi)
-    T_td = np.einsum('ijk,jkl->il', W_phi_Pi, T)
-    SR_TD_SS = np.linalg.inv(I_S - gamma * T_td)
+    W_phi_Pi = jnp.einsum('ij,jkl->ikl', Phi, W_Pi)
+    T_td = jnp.einsum('ijk,jkl->il', W_phi_Pi, T)
+    SR_TD_SS = jnp.linalg.inv(I_S - gamma * T_td)
 
-    """
-    print(f"SR_MC_SS = SR_TD_SS? {np.allclose(SR_MC_SS, SR_TD_SS)}")
+    return SR_MC_SS, SR_TD_SS, {'W_Pi': W_Pi, 'T': T}
 
-    A_MC = dot(SR_MC_SS, Phi)
-    A_TD = dot(SR_TD_SS, Phi)
+def calculate_sf(pomdp: POMDP, pi: jnp.ndarray):
 
-    print(f"X Phi equal? {np.allclose(A_MC, A_TD)}")
+    n_obs = pomdp.observation_space.n
+    I_O = jnp.eye(n_obs)
 
-    A_MC = dot(ddot(W_Pi, T), SR_MC_SS)
-    A_TD = dot(ddot(W_Pi, T), SR_TD_SS)
+    SR_MC_SS, SR_TD_SS, info = calculate_sr(pomdp, pi)
 
-    print(f"WPi T X equal? {np.allclose(A_MC, A_TD)}")
+    W_Pi, T = info['W_Pi'], info['T']
 
-    A_MC = dot(dot(T, SR_MC_SS), Phi)
-    A_TD = dot(dot(T, SR_TD_SS), Phi)
+    proj_next_state_to_obs = jnp.einsum('ijk,jkl->il', W_Pi, T)
+    SR_MC_SO = SR_MC_SS @ pomdp.phi
+    SR_TD_SO = SR_TD_SS @ pomdp.phi
 
-    print(f"T X Phi equal? {np.allclose(A_MC, A_TD)}")
-
-    A_MC = dot(dot(ddot(kron(W, I_A), T), SR_MC_SS), Phi)
-    A_TD = dot(dot(ddot(kron(W, I_A), T), SR_TD_SS), Phi)
-
-    print(f"W T X Phi equal? {np.allclose(A_MC, A_TD)}")
-
-    A_MC = dot(dot(ddot(W_Pi, T), SR_MC_SS), Phi)
-    A_TD = dot(dot(ddot(W_Pi, T), SR_TD_SS), Phi)
-
-    print(f"WPi T X Phi equal? {np.allclose(A_MC, A_TD)}")
-    """
-
-    SR_MC = I_O + gamma * dot(ddot(W_Pi, T), SR_MC_SS, Phi)
-    SR_TD = I_O + gamma * dot(ddot(W_Pi, T), SR_TD_SS, Phi)
+    SR_MC = I_O + pomdp.gamma * (proj_next_state_to_obs @ SR_MC_SO)
+    SR_TD = I_O + pomdp.gamma * (proj_next_state_to_obs @ SR_TD_SO)
     # SR_TD = np.linalg.inv(I_O - gamma * dot(ddot(W_Pi, T), Phi))
 
     return SR_MC, SR_TD

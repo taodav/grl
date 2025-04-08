@@ -6,7 +6,7 @@ import jax.numpy as jnp
 
 from grl.environment import load_pomdp
 from grl.loss.ld import weight_and_sum_discrep_loss
-from grl.loss.sr import sr_lstd_lambda
+# from grl.loss.sr import sr_lstd_lambda
 from grl.mdp import POMDP, MDP
 from grl.memory import memory_cross_product
 from grl.utils.mdp_solver import get_p_s_given_o
