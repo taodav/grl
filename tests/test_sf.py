@@ -2,7 +2,7 @@ import numpy as np
 
 import jax
 
-from grl.loss.sr import calculate_sf
+from grl.loss.sr import sf_lambda
 
 from grl.mdp import MDP, POMDP
 from grl.environment.tmaze import *
@@ -317,9 +317,10 @@ if __name__ == "__main__":
     pomdp, info = load_pomdp(spec_name)
     pi = info['Pi_phi'][0]
 
-    sr_mc, sr_td = calculate_sr_discrepancy_raw(pomdp, pi)
+    sf_mc, sf_td = calculate_sr_discrepancy_raw(pomdp, pi)
 
-    new_sr_mc, new_sr_td = calculate_sf(pomdp, pi)
+    new_sf_td = sf_lambda(pomdp, pi, lambda_=0.)
+    new_sf_mc = sf_lambda(pomdp, pi, lambda_=1.)
 
     print()
 
