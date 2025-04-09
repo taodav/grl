@@ -125,7 +125,9 @@ def sr_lambda(
     Pr_s = c_s / jnp.sum(c_s)
 
     W_unnorm = jnp.einsum('i,ij->ji', Pr_s, Phi)
-    W = W_unnorm / W_unnorm.sum(axis=-1, keepdims=True)
+    W_denom = W_unnorm.sum(axis=-1, keepdims=True)
+    W_denom += jnp.isclose(W_denom, 0).astype(float)
+    W = W_unnorm / W_denom
 
     W_Pi = jnp.einsum('ijk,jklm->ilm', Pi, kron(W, I_A))
 

@@ -39,8 +39,8 @@ belief_perf = {
 
 experiment_dirs = [
     Path(ROOT_DIR, 'results', 'dummy_pg_kitchen'),
-    Path(ROOT_DIR, 'results', 'ld_pg_kitchen_v'),
-    Path(ROOT_DIR, 'results', 'gvf_pg_kitchen_v'),
+    Path(ROOT_DIR, 'results', 'ld_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')

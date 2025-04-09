@@ -227,7 +227,7 @@ def calculate_sr_discrepancy_raw(
     # transition function
     assert n_actions != n_states, f"n_actions = n_states = {n_actions}, which means we can't tell if T has shape (S,A,S) or (A,S,S)"
     if T.shape == (n_actions, n_states, n_states):
-        T = np.permute_dims(T, (1, 0, 2))
+        T = np.transpose(T, (1, 0, 2))
     assert is_subprob_matrix(T, (n_states, n_actions, n_states))
     T = make_subprob_matrix(T)
     assert is_subprob_matrix(T, (n_states, n_actions, n_states))
@@ -330,9 +330,22 @@ def test_sr(pomdp: POMDP, pi: np.ndarray):
 if __name__ == "__main__":
     jax.disable_jit(True)
 
-    spec_name = 'tmaze_5_two_thirds_up'
+    # spec_name = 'tmaze_5_two_thirds_up'
+    spec_name = 'parity_check'
     pomdp, info = load_pomdp(spec_name)
-    pi = info['Pi_phi'][0]
+    if info['Pi_phi'] is None:
+        if spec_name == 'parity_check':
+            pi = np.array([
+                [0, 1],
+                [0, 1],
+                [0, 1],
+                [0, 1],
+                [0, 1],
+                [2 / 3, 1 / 3],
+                [0, 1],
+            ])
+    else:
+        pi = info['Pi_phi'][0]
 
     test_sr(pomdp, pi)
 

@@ -8,8 +8,10 @@ hparams = {
     'entry': '-m scripts.batch_run_kitchen_sinks_single_obj',
     'args': [{
         'spec': [
-            'tiger-alt-start', 'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
-            'cheese.95', 'network', 'shuttle.95', 'paint.95', 'parity_check'
+            'tiger-alt-start', 'paint.95', 'parity_check'
+            # 'tiger-alt-start', 'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
+            # 'cheese.95', 'network', 'shuttle.95', 'paint.95', 'parity_check'
+
             # 'hallway'
             # 'bridge-repair',
         ],
