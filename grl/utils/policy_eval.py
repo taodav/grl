@@ -85,7 +85,7 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9
     oa = o * a
 
     gamma = pomdp.gamma
-    if isinstance(pomdp.gamma, jnp.ndarray):
+    if isinstance(pomdp.gamma, jnp.ndarray) and pomdp.gamma.shape:
         gamma = pomdp.gamma.repeat(a)[..., None]  # sa x 1
     s0 = pomdp.p0
 
@@ -131,4 +131,5 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9
     Q_LSTD_lamb_ao = Q_LSTD_lamb_as @ p_pi_of_s_given_o
     V_LSTD_lamb_o = V_LSTD_lamb_s @ p_pi_of_s_given_o
 
-    return V_LSTD_lamb_o, Q_LSTD_lamb_ao, {'occupancy': occupancy_s}
+    return V_LSTD_lamb_o, Q_LSTD_lamb_ao, {'occupancy': occupancy_s,
+                                           'q_sa': Q_LSTD_lamb_as}

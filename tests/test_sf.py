@@ -2,7 +2,8 @@ import numpy as np
 
 import jax
 
-from grl.loss.sr import sf_lambda
+from grl.loss.sr import sf_lambda, sr_lambda
+from grl.utils.policy_eval import functional_solve_mdp
 
 from grl.mdp import MDP, POMDP
 from grl.environment.tmaze import *
@@ -310,6 +311,22 @@ def calculate_sr_discrepancy_raw(
     return SR_MC, SR_TD
 
 
+def test_sr(pomdp: POMDP, pi: np.ndarray):
+    """
+    Test our SR implementation (over SA x SA) with LSTDQ lambda
+    """
+    pi_s = pomdp.phi @ pi
+    R_sa = np.einsum('ijk,ijk->ij', pomdp.T, pomdp.R).T
+    R_s = np.einsum('ij,ij->i', R_sa, pi_s)
+
+    v_s, _ = functional_solve_mdp(pi_s, pomdp)
+
+    sr_lamb_s_s, _ = sr_lambda(pomdp, pi, lambda_=1.)
+    v_s_sr = np.einsum('ik,k->i', sr_lamb_s_s, R_s)
+    assert np.allclose(v_s, v_s_sr)
+
+
+
 if __name__ == "__main__":
     jax.disable_jit(True)
 
@@ -317,10 +334,21 @@ if __name__ == "__main__":
     pomdp, info = load_pomdp(spec_name)
     pi = info['Pi_phi'][0]
 
+    test_sr(pomdp, pi)
+
     sf_mc, sf_td = calculate_sr_discrepancy_raw(pomdp, pi)
 
+    # O x A x O
     new_sf_td = sf_lambda(pomdp, pi, lambda_=0.)
     new_sf_mc = sf_lambda(pomdp, pi, lambda_=1.)
+    # new_oa_sf_td = sf_lambda(pomdp, pi, lambda_=0.)
+    # new_oa_sf_mc = sf_lambda(pomdp, pi, lambda_=1.)
+
+    # new_sf_td = np.einsum('ijk,ij->ik', new_oa_sf_td, pi)
+    # new_sf_mc = np.einsum('ijk,ij->ik', new_oa_sf_mc, pi)
+
+    assert np.allclose(new_sf_mc, sf_mc)
+    assert np.allclose(new_sf_td, sf_td)
 
     print()
 

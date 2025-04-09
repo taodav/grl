@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from grl.environment import load_pomdp
 from grl.loss.ld import weight_and_sum_discrep_loss
 # from grl.loss.sr import sr_lstd_lambda
+from grl.loss.sr import sr_lambda, sf_lambda
 from grl.mdp import POMDP, MDP
 from grl.memory import memory_cross_product
 from grl.utils.mdp_solver import get_p_s_given_o
@@ -48,44 +49,55 @@ def gvf_loss(pi: jnp.ndarray,
     pi_sa = pomdp.phi @ pi
     a, s, _ = pomdp.T.shape
 
-    sr_as_as_0, info = sr_lstd_lambda(pi, pomdp, lambda_=lambda_0)
-    sr_as_as_1, _ = sr_lstd_lambda(pi, pomdp, lambda_=lambda_1)
+    # sr_as_as_0, info = sr_lstd_lambda(pi, pomdp, lambda_=lambda_0)
+    # sr_as_as_1, _ = sr_lstd_lambda(pi, pomdp, lambda_=lambda_1)
+    sr_s_s_0, info = sr_lambda(pomdp, pi, lambda_=lambda_0)
+    sr_s_s_1, _ = sr_lambda(pomdp, pi, lambda_=lambda_1)
 
-    R_as, phi_as_ao, occupancy_as = info['R_as'], info['phi_as_ao'], info['occupancy_as']
-
-    # we need occupancy over s
-    occupancy_s = occupancy_as.reshape((a, s)).sum(0)
+    W_Pi, T, c_s = info['W_Pi'], info['T'], info['c_s']
+    proj_next_state_to_obs = jnp.einsum('ijk,jkl->il', W_Pi, T)
 
     # We can calculate the gvf loss by projecting the difference between the two SRs,
     # as per the generalized LD document.
-    sr_diff = jnp.abs(sr_as_as_0 - sr_as_as_1)
+    sr_diff = jnp.abs(sr_s_s_0 - sr_s_s_1)
+
+    def calc_sf(sr_s_s: jnp.ndarray):
+        I_O = jnp.eye(pomdp.observation_space.n)
+        sr_so = sr_s_s @ pomdp.phi
+        return I_O + pomdp.gamma * (proj_next_state_to_obs @ sr_so)
 
     if projection == 'obs_rew':
-        proj = jnp.concatenate((phi_as_ao, R_as[..., None]), axis=-1)
+        sf_diff = calc_sf(sr_diff)
+        R_sa = jnp.einsum('ijk,ijk->ij', pomdp.T, pomdp.R).T
+        R_s = jnp.einsum('ij,ij->i', R_sa, pi_sa)
+        v_s_sr = jnp.einsum('ik,k->i', sr_diff, R_s)
+        v_diff = info['W'] @ v_s_sr
+        projected_diff = jnp.concatenate((sf_diff, v_diff[..., None]), axis=-1)
+
     elif projection == 'obs':
-        proj = phi_as_ao
+        sf = calc_sf(sr_diff)
+        projected_diff = sf
     else:
         assert proj is not None
 
-    projected_diff = (sr_diff @ proj).reshape((a, s, -1))  # A x S x proj_size
+    # take absolute value
+    abs_projected_diff = jnp.abs(projected_diff)
 
     # TODO: How do we reduce projection down to a single dimension? Right now we just do sum.
-    a_s_diff = projected_diff.sum(axis=-1)  # A x S
+    diff = abs_projected_diff.sum(axis=-1)  # O
 
-    # now we need to apply W and map back down to Phi space.
-    p_pi_of_s_given_o = get_p_s_given_o(pomdp.phi, occupancy_s)
-
-    if value_type == 'v':
-        s_diff = jnp.einsum('ij,ji->j', a_s_diff, pi_sa)
-        o_diff = s_diff @ p_pi_of_s_given_o
-        diff = o_diff
-    elif value_type == 'q':
-        a_o_diff = a_s_diff @ p_pi_of_s_given_o
-        diff = a_o_diff
-    else:
-        raise NotImplementedError
-
-    c_s = occupancy_s * (1 - pomdp.terminal_mask)
+    # # now we need to apply W and map back down to Phi space.
+    # p_pi_of_s_given_o = get_p_s_given_o(pomdp.phi, occupancy_s)
+    #
+    # if value_type == 'v':
+    #     s_diff = jnp.einsum('ij,ji->j', a_s_diff, pi_sa)
+    #     o_diff = s_diff @ p_pi_of_s_given_o
+    #     diff = o_diff
+    # elif value_type == 'q':
+    #     a_o_diff = a_s_diff @ p_pi_of_s_given_o
+    #     diff = a_o_diff
+    # else:
+    #     raise NotImplementedError
 
     loss = weight_and_sum_discrep_loss(diff,
                                        c_s,

@@ -99,7 +99,7 @@ def sr_lambda(
     """
     n_states, n_obs = pomdp.state_space.n, pomdp.observation_space.n
     n_actions = pomdp.action_space.n
-    n_sa = n_states * n_actions
+    # n_sa = n_states * n_actions
 
     T, R, p0, Phi, gamma = pomdp.T, pomdp.R, pomdp.p0, pomdp.phi, pomdp.gamma
 
@@ -112,9 +112,7 @@ def sr_lambda(
 
     I_S = jnp.eye(n_states)
     I_A = jnp.eye(n_actions)
-    I_SA = jnp.eye(n_sa)
-    # I_SA = jnp.eye(n_actions * n_states).reshape((n_states, n_actions, n_states, n_actions))
-    # Phi_A = kron(Phi, I_A)
+    # I_SA = jnp.eye(n_sa)
 
     pi_s = Phi @ pi
 
@@ -135,40 +133,57 @@ def sr_lambda(
 
     K_pi = lambda_ * Pi_s + (1 - lambda_) * W_phi_Pi
 
-    # T_lambda = jnp.einsum('ijk,jkl->il', K_pi, T)
-    # SR_lambda_S_S = jnp.linalg.inv(I_S - gamma * T_lambda)
+    T_lambda = jnp.einsum('ijk,jkl->il', K_pi, T)
+    SR_lambda_S_S = jnp.linalg.inv(I_S - gamma * T_lambda)
 
-    T_lambda = jnp.einsum('ijk,klm->ijlm', T, K_pi)
-    T_lambda_flat = T_lambda.reshape((n_sa, n_sa))
-    SR_lambda_SA_SA_flat = jnp.linalg.inv(I_SA - gamma * T_lambda_flat)
-    SR_lambda_SA_SA = SR_lambda_SA_SA_flat.reshape((T_lambda.shape))
+    # T_lambda = jnp.einsum('ijk,klm->ijlm', T, K_pi)
+    # T_lambda_flat = T_lambda.reshape((n_sa, n_sa))
+    # SR_lambda_SA_SA_flat = jnp.linalg.inv(I_SA - gamma * T_lambda_flat)
+    # SR_lambda_SA_SA = SR_lambda_SA_SA_flat.reshape((T_lambda.shape))
+    #
+    # return SR_lambda_SA_SA, {'W_Pi': W_Pi, 'T': T, 'pi_s': pi_s}
+    return SR_lambda_S_S, {'W': W, 'W_Pi': W_Pi, 'T': T, 'pi_s': pi_s, 'c_s': c_s}
 
-    return SR_lambda_SA_SA, {'W_Pi': W_Pi, 'T': T, 'pi_s': pi_s}
+# TODO: OA version of SF lambda
+# def sf_lambda(pomdp: POMDP, pi: jnp.ndarray, lambda_: float = 0.):
+#     n_actions = pomdp.action_space.n
+#     n_obs = pomdp.observation_space.n
+#     n_oa = n_obs * n_actions
+#
+#
+#     SR_lambda_SA_SA, info = sr_lambda(pomdp, pi, lambda_=lambda_)
+#
+#     W_Pi, T, pi_s = info['W_Pi'], info['T'], info['pi_s']
+#
+#     # Compute the state-action to obs observation function
+#     # (use a copy of phi for each action)
+#     phi_as_o = jnp.expand_dims(pomdp.phi, axis=1).repeat(n_actions, axis=1)
+#
+#     Pr_next_s_given_o = jnp.einsum('ijk,jkl->il', W_Pi, T)
+#
+#     SR_lambda_SA_O = jnp.einsum('ijkl,klm->ijm', SR_lambda_SA_SA, phi_as_o)
+#
+#     next_SF = jnp.einsum('ij,jkl->ikl', Pr_next_s_given_o, SR_lambda_SA_O)
+#     next_SF_flat = next_SF.reshape((n_oa, -1))
+#
+#     I_OA = jnp.eye(n_obs).repeat(n_actions, axis=0)
+#
+#     SF_lambda_OA_O_flat = I_OA + pomdp.gamma * next_SF_flat
+#     SF_lambda_OA_O = SF_lambda_OA_O_flat.reshape(next_SF.shape)
+#     # SR_TD = np.linalg.inv(I_O - gamma * dot(ddot(W_Pi, T), Phi))
+#
+#     return SF_lambda_OA_O
 
 def sf_lambda(pomdp: POMDP, pi: jnp.ndarray, lambda_: float = 0.):
-    n_actions = pomdp.action_space.n
     n_obs = pomdp.observation_space.n
-    n_oa = n_obs * n_actions
+    I_O = jnp.eye(n_obs)
 
-    I_OA = jnp.eye(n_oa)
+    SR_lambda_S_S, info = sr_lambda(pomdp, pi, lambda_=lambda_)
 
-    SR_lambda_SA_SA, info = sr_lambda(pomdp, pi, lambda_=lambda_)
-
-    W_Pi, T, pi_s = info['W_Pi'], info['T'], info['pi_s']
-    T_as_as = jnp.einsum('ijk,kl->ijlk', T, pi_s)
-
-    # Compute the state-action to obs-action observation function
-    # (use a copy of phi for each action)
-    phi_as_ao = kron(pomdp.phi, jnp.eye(n_actions))
-
+    W_Pi, T = info['W_Pi'], info['T']
 
     proj_next_state_to_obs = jnp.einsum('ijk,jkl->il', W_Pi, T)
-    SR_lambda_SA_OA = jnp.einsum('ijkl,klmn->ijmn', SR_lambda_SA_SA, phi_as_ao)
+    SR_lambda_SO = SR_lambda_S_S @ pomdp.phi
 
-    next_SF = jnp.einsum('ij,jklm->iklm', proj_next_state_to_obs, SR_lambda_SA_OA)
-    next_SF_flat = next_SF.reshape((n_oa, n_oa))
-    SF_lambda_OA_OA_flat = I_OA + pomdp.gamma * next_SF_flat
-    SF_lambda_OA_OA = SF_lambda_OA_OA_flat.reshape(next_SF.shape)
-    # SR_TD = np.linalg.inv(I_O - gamma * dot(ddot(W_Pi, T), Phi))
-
-    return SF_lambda_OA_OA
+    SR_lambda_OO = I_O + pomdp.gamma * (proj_next_state_to_obs @ SR_lambda_SO)
+    return SR_lambda_OO
