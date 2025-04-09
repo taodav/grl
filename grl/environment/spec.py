@@ -211,6 +211,8 @@ def augment_pomdp_gamma(pomdp: POMDP,
 
     o = pomdp.observation_space.n
 
+    assert np.all((pomdp.phi > 0).sum(axis=-1) < 1), "States map to more than one obs!"
+
     if augmentation == 'uniform':
         obs_gammas = jax.random.uniform(rand_key, shape=(o, ), minval=0, maxval=1)
     elif augmentation == 'normal':
@@ -233,11 +235,7 @@ def augment_pomdp_gamma(pomdp: POMDP,
     if scale is not None:
         raise NotImplementedError
 
-    # now we need to map obs_gammas to state_gammas
-    state_phi_occupancy = (pomdp.phi > 0).astype(float)  # S x O
-    state_gammas = state_phi_occupancy @ obs_gammas
-
-    pomdp.gamma = state_gammas
+    pomdp.gamma = obs_gammas[..., None]
     return pomdp
 
 

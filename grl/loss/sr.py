@@ -103,6 +103,12 @@ def sr_lambda(
 
     T, R, p0, Phi, gamma = pomdp.T, pomdp.R, pomdp.p0, pomdp.phi, pomdp.gamma
 
+    if len(gamma.shape) > 1:
+        # if we have a vector-based gamma, we need to map \gamma to (S, 1) space.
+        # we make the assumption here that states can only ever map to one observation
+        # (strict aliasing)
+        gamma = pomdp.phi @ pomdp.gamma  # S x 1
+
     terminal_mask = jnp.diag(pomdp.terminal_mask)[None, ...].repeat(n_actions, axis=0)  # A x S x S
     if T.shape == (n_actions, n_states, n_states):
         T = jnp.permute_dims(T, (1, 0, 2))

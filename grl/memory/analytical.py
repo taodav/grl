@@ -34,7 +34,7 @@ def memory_cross_product(mem_params: jnp.ndarray, pomdp: POMDP):
     new_terminal_mask = pomdp.terminal_mask.repeat(n_states_m)
 
     gamma = pomdp.gamma
-    if isinstance(gamma, jnp.ndarray) and gamma.shape:
+    if len(gamma.shape) > 1:
         gamma = gamma.repeat(n_states_m)
 
     mem_aug_mdp = MDP(T_x, R_x, p0_x, gamma=gamma, terminal_mask=new_terminal_mask)

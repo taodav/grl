@@ -22,6 +22,7 @@ def analytical_pe(pi_obs: jnp.ndarray, pomdp: POMDP):
 
     # TD
     T_obs_obs, R_obs_obs = functional_create_td_model(p_pi_of_s_given_o, pomdp)
+    # TODO: change gamma here
     td_model = MDP(T_obs_obs, R_obs_obs, pomdp.p0 @ pomdp.phi, gamma=pomdp.gamma)
     td_v_vals, td_q_vals = functional_solve_mdp(pi_obs, td_model)
     td_vals = {'v': td_v_vals, 'q': td_q_vals}
@@ -85,8 +86,12 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9
     oa = o * a
 
     gamma = pomdp.gamma
-    if isinstance(pomdp.gamma, jnp.ndarray) and pomdp.gamma.shape:
-        gamma = pomdp.gamma.repeat(a)[..., None]  # sa x 1
+    if len(gamma.shape) > 1:
+        # if we have a vector-based gamma, we need to map \gamma to (SA, 1) space.
+        # we make the assumption here that states can only ever map to one observation
+        # (strict aliasing)
+        gamma = pomdp.phi @ pomdp.gamma
+        gamma = gamma.repeat(a, axis=0)  # sa x 1
     s0 = pomdp.p0
 
     pi_sa = phi @ pi
