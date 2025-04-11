@@ -212,9 +212,9 @@ def augment_pomdp_gamma(pomdp: POMDP,
 
     o = pomdp.observation_space.n
 
-    # assert np.all((pomdp.phi > 0).sum(axis=-1) <= 1), "States map to more than one obs!"
-    if np.all((pomdp.phi > 0).sum(axis=-1) <= 1):
-        pomdp = map_to_strict_aliasing(pomdp)
+    assert np.all((pomdp.phi > 0).sum(axis=-1) <= 1), "States map to more than one obs!"
+    # if np.all((pomdp.phi > 0).sum(axis=-1) <= 1):
+    #     pomdp = map_to_strict_aliasing(pomdp)
 
 
     if augmentation == 'uniform':
