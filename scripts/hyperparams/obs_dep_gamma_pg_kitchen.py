@@ -9,8 +9,8 @@ hparams = {
     'args': [{
         'spec': [
             'tiger-alt-start', 'network', 'shuttle.95', 'paint.95',
-            'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
-            'cheese.95', 'parity_check'
+            # 'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
+            # 'cheese.95', 'parity_check'
         ],
         'policy_optim_alg': 'policy_grad',
         'value_type': 'q',

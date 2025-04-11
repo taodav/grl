@@ -45,7 +45,7 @@ def parse_batch_dirs(exp_dirs: list[Path],
 
             beginning = logs['beginning']
             aim_measures = beginning['measures']
-            if 'kitchen' in exp_dir.stem:
+            if 'kitchen' in exp_dir.name:
                 # if we're doing kitchen sinks policies, we need to take the mean over
                 # initial policies
                 init_policy_perf_seeds = (aim_measures['values']['state_vals']['v'] * aim_measures['values']['p0'])

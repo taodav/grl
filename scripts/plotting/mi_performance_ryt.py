@@ -37,10 +37,15 @@ belief_perf = {
 #     Path(ROOT_DIR, 'results', 'final_discrep_kitchen_sinks_pg'),
 # ]
 
+title = 'SF w/ obs-dependent gamma (U[0, 1])'
 experiment_dirs = [
     Path(ROOT_DIR, 'results', 'dummy_pg_kitchen'),
+
     # Path(ROOT_DIR, 'results', 'ld_pg_kitchen'),
+    # Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
+
     Path(ROOT_DIR, 'results', 'obs_dep_gamma_pg_kitchen'),
+    # Path(ROOT_DIR, 'results', 'obs_dep_uniform_gamma_0.8_0.99_pg_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -54,11 +59,11 @@ split_by = [arg for arg in args_to_keep if arg != 'seed'] + ['experiment']
 policy_optim_alg = 'policy_grad'
 
 spec_plot_order = [
-    # 'network',
-    # 'paint.95',
+    'network',
+    'paint.95',
     '4x3.95',
-    # 'tiger-alt-start',
-    # 'shuttle.95',
+    'tiger-alt-start',
+    'shuttle.95',
     'cheese.95',
     'tmaze_5_two_thirds_up',
     'parity_check'
@@ -94,7 +99,7 @@ residual = False
 alpha = 1.
 filtered_df = all_res_df[
 # (all_res_df['residual'] == residual) &
-((all_res_df['gamma_type'] == 'fixed') | (all_res_df['gamma_type'] == 'normal')) &
+((all_res_df['gamma_type'] == 'fixed') | (all_res_df['gamma_type'] == 'uniform')) &
 (all_res_df['alpha'] == alpha)
 ].reset_index()
 
@@ -168,7 +173,7 @@ for spec in spec_plot_order:
     sorted_std_err_df = pd.concat([sorted_std_err_df, std_err_spec_df])
 
 # %%
-experiments = normalized_df['experiment'].unique()
+experiments = sorted(normalized_df['experiment'].unique())
 objectives = normalized_df['objective'].unique()
 
 
@@ -251,6 +256,7 @@ ax.set_xticklabels(xlabels)
 # alpha_str = 'uniform' if alpha == 1. else 'occupancy'
 residual_str = 'semi_grad' if not residual else 'residual'
 title_str = " vs. ".join([f"{obj} ({hatch})" for obj, hatch in zip(objectives, exp_hatches)])
+title_str = title + ' ' + title_str
 # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
 ax.set_title(title_str)
 fig.tight_layout()
