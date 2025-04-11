@@ -203,7 +203,9 @@ def load_pomdp(name: str,
 def augment_pomdp_gamma(pomdp: POMDP,
                         rand_key: jax.random.PRNGKey,
                         augmentation: str = 'uniform',  # uniform | normal
-                        scale: float = None):
+                        scale: float = None,
+                        min_val: float = 0.,
+                        max_val: float = 1.):
     pomdp = deepcopy(pomdp)
     """
     TODO: these augmentations assume observation-conditioned gammas, but 
@@ -212,21 +214,20 @@ def augment_pomdp_gamma(pomdp: POMDP,
 
     o = pomdp.observation_space.n
 
-    assert np.all((pomdp.phi > 0).sum(axis=-1) <= 1), "States map to more than one obs!"
-    # if np.all((pomdp.phi > 0).sum(axis=-1) <= 1):
-    #     pomdp = map_to_strict_aliasing(pomdp)
+    # assert np.all((pomdp.phi > 0).sum(axis=-1) <= 1), "States map to more than one obs!"
+    if not np.all((pomdp.phi > 0).sum(axis=-1) <= 1):
+        new_pomdp = map_to_strict_aliasing(pomdp)
+        pomdp = new_pomdp
 
 
     if augmentation == 'uniform':
-        obs_gammas = jax.random.uniform(rand_key, shape=(o, ), minval=0, maxval=1)
+        obs_gammas = jax.random.uniform(rand_key, shape=(o, ), minval=min_val, maxval=max_val)
     elif augmentation == 'normal':
         mean = 0.0
         std = 1.0
-        low, high = -1.0, 1.0
-
         # Compute CDF bounds
-        cdf_low = norm.cdf(low, loc=mean, scale=std)
-        cdf_high = norm.cdf(high, loc=mean, scale=std)
+        cdf_low = norm.cdf(min_val, loc=mean, scale=std)
+        cdf_high = norm.cdf(max_val, loc=mean, scale=std)
 
         # Sample uniform values between the CDF bounds
         u = jax.random.uniform(rand_key, shape=(o,), minval=cdf_low, maxval=cdf_high)

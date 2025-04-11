@@ -39,14 +39,14 @@ belief_perf = {
 
 experiment_dirs = [
     Path(ROOT_DIR, 'results', 'dummy_pg_kitchen'),
-    Path(ROOT_DIR, 'results', 'ld_pg_kitchen'),
-    Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
+    # Path(ROOT_DIR, 'results', 'ld_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'obs_dep_gamma_pg_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
 pomdp_files_dir = Path(ROOT_DIR, 'grl', 'environment', 'pomdp_files')
 
-args_to_keep = ['spec', 'n_mem_states', 'seed', 'alpha', 'objective']
+args_to_keep = ['spec', 'n_mem_states', 'seed', 'alpha', 'objective', 'gamma_type']
 split_by = [arg for arg in args_to_keep if arg != 'seed'] + ['experiment']
 
 # this option allows us to compare to either the optimal belief state soln
@@ -54,13 +54,14 @@ split_by = [arg for arg in args_to_keep if arg != 'seed'] + ['experiment']
 policy_optim_alg = 'policy_grad'
 
 spec_plot_order = [
-    'network',
-    'paint.95',
-    '4x3.95', 'tiger-alt-start',
-    'shuttle.95',
-    'cheese.95', 'tmaze_5_two_thirds_up',
+    # 'network',
+    # 'paint.95',
+    '4x3.95',
+    # 'tiger-alt-start',
+    # 'shuttle.95',
+    'cheese.95',
+    'tmaze_5_two_thirds_up',
     'parity_check'
-    # 'parity_check'
 ]
 
 # plot_key = 'final_memoryless_optimal_perf'  # for batch_run
@@ -93,6 +94,7 @@ residual = False
 alpha = 1.
 filtered_df = all_res_df[
 # (all_res_df['residual'] == residual) &
+((all_res_df['gamma_type'] == 'fixed') | (all_res_df['gamma_type'] == 'normal')) &
 (all_res_df['alpha'] == alpha)
 ].reset_index()
 

@@ -83,6 +83,10 @@ def get_args():
 
     parser.add_argument('--gamma_type', default='fixed', choices=['fixed', 'uniform', 'normal'],
                         help='Do we use observation-based gammas? (fixed | uniform | normal)')
+    parser.add_argument('--gamma_min', default=0., type=float,
+                        help="If we use uniform gamma_type, what's our minimum gamma?")
+    parser.add_argument('--gamma_max', default=1., type=float,
+                        help="If we use uniform gamma_type, what's our maximum gamma?")
 
     parser.add_argument('--optimizer', type=str, default='adam',
                         help='What optimizer do we use? (sgd | adam | rmsprop)')
@@ -169,7 +173,10 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
     pomdp_for_mem_optim = pomdp
     if args.gamma_type != 'fixed':
         rand_key, augment_gamma_key = jax.random.split(rand_key)
-        pomdp_for_mem_optim = augment_pomdp_gamma(pomdp, augment_gamma_key, augmentation=args.gamma_type)
+        pomdp_for_mem_optim = augment_pomdp_gamma(pomdp, augment_gamma_key,
+                                                  augmentation=args.gamma_type,
+                                                  max_val=args.gamma_max,
+                                                  min_val=args.gamma_min)
 
 
 

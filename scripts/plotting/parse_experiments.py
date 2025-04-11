@@ -37,6 +37,9 @@ def parse_batch_dirs(exp_dirs: list[Path],
             if args['spec'] not in baseline_dict:
                 continue
 
+            if 'gamma_type' not in args:
+                args['gamma_type'] = 'fixed'
+
             pomdp, _ = load_pomdp(args['spec'])
             # n_random_policies = args['random_policies']
 
