@@ -546,3 +546,5 @@ def is_numeric(lst):
             return False
     else:
         return False
+
+

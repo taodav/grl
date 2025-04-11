@@ -365,8 +365,9 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         ld_improved_pi_params = all_improved_pi_params
 
         final_info = {
-            'improved_mem': {'pi_params': ld_improved_pi_params,
-                             'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_improved_pi_params)},
+            'improved_mem': {
+                'pi_params': ld_improved_pi_params,
+                'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_improved_pi_params)},
         }
 
         info['final'] = final_info

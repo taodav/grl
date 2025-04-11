@@ -43,15 +43,19 @@ def functional_solve_mdp(pi: jnp.ndarray, mdp: Union[MDP, POMDP]):
     T_pi = (Pi_pi * mdp.T).sum(axis=0) # T^π(s'|s)
     R_pi = (Pi_pi * mdp.T * mdp.R).sum(axis=0).sum(axis=-1) # R^π(s)
 
+    gamma, gamma_sa = mdp.gamma, mdp.gamma
+    if not isinstance(gamma, float) and len(gamma.shape) > 0 and gamma.shape[0] != mdp.state_space.n:
+        gamma = jnp.einsum('ij,jk->ik', mdp.phi, gamma)  # S x 1
+        gamma_sa = jnp.expand_dims(gamma, axis=0).repeat(mdp.action_space.n, axis=0)  # A x S x 1
     # A*V_pi(s) = b
     # A = (I - \gamma (T^π))
     # b = R^π
-    A = (jnp.eye(mdp.state_space.n) - mdp.gamma * T_pi)
+    A = (jnp.eye(mdp.state_space.n) - gamma * T_pi)
     b = R_pi
     v_vals = jnp.linalg.solve(A, b)
 
     R_sa = (mdp.T * mdp.R).sum(axis=-1) # R(s,a)
-    q_vals = (R_sa + (mdp.gamma * mdp.T @ v_vals))
+    q_vals = (R_sa + (gamma_sa * mdp.T @ v_vals))
 
     return v_vals, q_vals
 
@@ -86,7 +90,7 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9
     oa = o * a
 
     gamma = pomdp.gamma
-    if len(gamma.shape) > 1:
+    if not isinstance(pomdp.gamma, float) and len(gamma.shape) > 0:
         # if we have a vector-based gamma, we need to map \gamma to (SA, 1) space.
         # we make the assumption here that states can only ever map to one observation
         # (strict aliasing)

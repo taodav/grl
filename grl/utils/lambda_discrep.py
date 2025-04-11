@@ -46,8 +46,11 @@ def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray) -> dict:
     discrep, mc_vals, td_vals = discrep_loss(pi, pomdp, error_type='l2', value_type='q', alpha=1.)
 
     # MSTDE
-    mstde_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=False)
-    mstde_res_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=True)
+    # TODO: vector-based gamma for MSTDE
+    mstde_loss, mstde_res_loss = None, None
+    if isinstance(pomdp.gamma, float) or len(pomdp.gamma.shape) == 0:
+        mstde_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=False)
+        mstde_res_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=True)
 
     # Value error
     value_err, state_vals, expanded_obs_vals = value_error(pi, pomdp, value_type='q', error_type='l2',
@@ -56,11 +59,16 @@ def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray) -> dict:
     value_dict = {
         'mc_vals': mc_vals,
         'td_vals': td_vals,
+        'mstde': mstde_loss,
+        'mstde_residual': mstde_res_loss,
         'state_vals': state_vals,
         'p0': pomdp.p0.copy()
     }
 
     return {'errors':
-                {'ld': discrep, 'mstde': mstde_loss, 'mstde_residual': mstde_res_loss, 'value': value_err},
+                {'ld': discrep,
+                 # 'mstde': mstde_loss,
+                 # 'mstde_residual': mstde_res_loss,
+                 'value': value_err},
             'values': value_dict
             }

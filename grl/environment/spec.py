@@ -12,6 +12,7 @@ from jax.scipy.stats import norm
 from definitions import ROOT_DIR
 from grl.environment.pomdp_file import POMDPFile
 from grl.mdp import MDP, POMDP
+from grl.environment.aliasing import map_to_strict_aliasing
 from grl.utils.math import normalize
 from . import examples_lib
 
@@ -211,7 +212,10 @@ def augment_pomdp_gamma(pomdp: POMDP,
 
     o = pomdp.observation_space.n
 
-    assert np.all((pomdp.phi > 0).sum(axis=-1) < 1), "States map to more than one obs!"
+    # assert np.all((pomdp.phi > 0).sum(axis=-1) <= 1), "States map to more than one obs!"
+    if np.all((pomdp.phi > 0).sum(axis=-1) <= 1):
+        pomdp = map_to_strict_aliasing(pomdp)
+
 
     if augmentation == 'uniform':
         obs_gammas = jax.random.uniform(rand_key, shape=(o, ), minval=0, maxval=1)

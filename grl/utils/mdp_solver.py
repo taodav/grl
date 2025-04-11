@@ -9,10 +9,13 @@ def functional_get_occupancy(pi_ground: jnp.ndarray, mdp: Union[MDP, POMDP]):
     Pi_pi = pi_ground.transpose()[..., None]
     T_pi = (Pi_pi * mdp.T).sum(axis=0) # T^π(s'|s)
 
+    gamma = mdp.gamma
+    if not isinstance(gamma, float) and len(gamma.shape) > 0:
+        gamma = jnp.einsum('ij,jk->ik', mdp.phi, gamma)  # S x 1
     # A*C_pi(s) = b
     # A = (I - \gamma (T^π)^T)
     # b = P_0
-    A = jnp.eye(mdp.state_space.n) - mdp.gamma * T_pi.transpose()
+    A = jnp.eye(mdp.state_space.n) - gamma * T_pi.transpose()
     b = mdp.p0
     return jnp.linalg.solve(A, b)
 
