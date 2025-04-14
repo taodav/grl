@@ -386,7 +386,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
 if __name__ == "__main__":
     start_time = time()
-    jax.disable_jit(True)
+    # jax.disable_jit(True)
 
     args = get_args()
 

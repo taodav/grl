@@ -6,7 +6,7 @@ from jax.nn import softmax
 
 from grl import POMDP
 from grl.memory.analytical import memory_cross_product
-from grl.loss import discrep_loss, mstd_err, value_error
+from grl.loss import discrep_loss, mstd_err, value_error, gvf_loss
 from grl.utils.policy_eval import analytical_pe
 
 def lambda_discrep_measures(pomdp: POMDP, pi: jnp.ndarray, discrep_loss_fn: Callable = None):
@@ -52,6 +52,11 @@ def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray) -> dict:
         mstde_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=False)
         mstde_res_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=True)
 
+    # GVF
+    gvf_obs_rew_loss, _, _ = gvf_loss(pi, pomdp, projection='obs_rew')
+    gvf_obs_loss, _, _ = gvf_loss(pi, pomdp, projection='obs')
+
+
     # Value error
     value_err, state_vals, expanded_obs_vals = value_error(pi, pomdp, value_type='q', error_type='l2',
                                                            lambda_=0.)
@@ -59,16 +64,17 @@ def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray) -> dict:
     value_dict = {
         'mc_vals': mc_vals,
         'td_vals': td_vals,
-        'mstde': mstde_loss,
-        'mstde_residual': mstde_res_loss,
         'state_vals': state_vals,
         'p0': pomdp.p0.copy()
     }
 
     return {'errors':
                 {'ld': discrep,
-                 # 'mstde': mstde_loss,
-                 # 'mstde_residual': mstde_res_loss,
-                 'value': value_err},
+                 'mstde': mstde_loss,
+                 'mstde_residual': mstde_res_loss,
+                 'value': value_err,
+                 'gvf_obs_rew': gvf_obs_rew_loss,
+                 'gvf_obs': gvf_obs_loss,
+                 },
             'values': value_dict
             }
