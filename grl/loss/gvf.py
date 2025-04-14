@@ -59,7 +59,7 @@ def gvf_loss(pi: jnp.ndarray,
 
     # We can calculate the gvf loss by projecting the difference between the two SRs,
     # as per the generalized LD document.
-    sr_diff = jnp.abs(sr_s_s_0 - sr_s_s_1)
+    sr_diff = sr_s_s_0 - sr_s_s_1
 
     def calc_sf(sr_s_s: jnp.ndarray):
         I_O = jnp.eye(pomdp.observation_space.n)
@@ -67,7 +67,7 @@ def gvf_loss(pi: jnp.ndarray,
         return I_O + pomdp.gamma * (proj_next_state_to_obs @ sr_so)
 
     if projection == 'obs_rew':
-        sf_diff = calc_sf(sr_diff)
+        sf_diff = calc_sf(sr_s_s_0) - calc_sf(sr_s_s_1)
         R_sa = jnp.einsum('ijk,ijk->ij', pomdp.T, pomdp.R).T
         R_s = jnp.einsum('ij,ij->i', R_sa, pi_sa)
         v_s_sr = jnp.einsum('ik,k->i', sr_diff, R_s)
@@ -75,8 +75,8 @@ def gvf_loss(pi: jnp.ndarray,
         projected_diff = jnp.concatenate((sf_diff, v_diff[..., None]), axis=-1)
 
     elif projection == 'obs':
-        sf = calc_sf(sr_diff)
-        projected_diff = sf
+        sf_diff = calc_sf(sr_s_s_0) - calc_sf(sr_s_s_1)
+        projected_diff = sf_diff
     else:
         assert proj is not None
 
