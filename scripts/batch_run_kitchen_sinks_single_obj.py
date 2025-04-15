@@ -77,7 +77,7 @@ def get_args():
                         help='For memory iteration, how many steps of policy improvement do we do per iteration?')
 
 
-    parser.add_argument('--policy_optim_alg', type=str, default='policy_iter',
+    parser.add_argument('--policy_optim_alg', type=str, default='policy_grad',
                         help='policy improvement algorithm to use. "policy_iter" - policy iteration, "policy_grad" - policy gradient, '
                              '"discrep_max" - discrepancy maximization, "discrep_min" - discrepancy minimization')
 
@@ -254,7 +254,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
             measure_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
         else:
             # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
-            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, loss_map[args.objective])
+            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp_for_mem_optim, loss_map[args.objective])
 
         pis_to_learn_mem = measure_pi_params
 

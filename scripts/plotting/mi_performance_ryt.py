@@ -37,15 +37,15 @@ belief_perf = {
 #     Path(ROOT_DIR, 'results', 'final_discrep_kitchen_sinks_pg'),
 # ]
 
-title = 'SF w/ obs-dependent gamma (U[0, 1])'
+title = 'SF w/ obs-dependent gamma (U[0.8, 0.99])'
 experiment_dirs = [
     Path(ROOT_DIR, 'results', 'dummy_pg_kitchen'),
 
     # Path(ROOT_DIR, 'results', 'ld_pg_kitchen'),
     # Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
 
-    Path(ROOT_DIR, 'results', 'obs_dep_gamma_pg_kitchen'),
-    # Path(ROOT_DIR, 'results', 'obs_dep_uniform_gamma_0.8_0.99_pg_kitchen'),
+    # Path(ROOT_DIR, 'results', 'obs_dep_gamma_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'obs_dep_uniform_gamma_0.8_0.99_pg_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
