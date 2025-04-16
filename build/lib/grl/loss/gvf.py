@@ -44,8 +44,6 @@ def ddot(a, b):
 def sr_discrep_loss_peter(
         pi: jnp.ndarray,
         pomdp: Union[MDP, POMDP]):
-    print(f"in loss: Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
-    print(pomdp.Gamma_s)
     n_states = pomdp.state_space.n
     n_actions = pomdp.action_space.n
     n_obs = pomdp.observation_space.n

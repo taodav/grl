@@ -1,10 +1,8 @@
 """
-This file runs a memory iteration with a batch of randomized initial policies,
+This file runs a memory iteration with a batch of randomized memory-augmented initial policies,
 as well as the TD optimal policy, on a list of different measures.
 
 """
-
-
 import argparse
 from functools import partial
 from time import time
@@ -19,31 +17,19 @@ from jax.debug import print
 from jax_tqdm import scan_tqdm
 import optax
 
-from grl.agent.analytical import new_pi_over_mem
 from grl.environment import load_pomdp
-from grl.environment.spec import augment_pomdp_gamma, make_subprob_matrix
 from grl.mdp import POMDP
-from grl.utils.lambda_discrep import log_all_measures, augment_and_log_all_measures
+from grl.utils.lambda_discrep import log_all_measures
 from grl.memory import memory_cross_product
 from grl.utils.file_system import results_path, numpyify_and_save
 from grl.utils.math import reverse_softmax
 from grl.loss import (
     pg_objective_func,
-    discrep_loss,
-    mstd_err,
-    variance_loss,
     mem_tde_loss,
     mem_discrep_loss,
     mem_bellman_loss,
-    obs_space_mem_discrep_loss,
-    mem_variance_loss,
-    disc_count_loss,
-    mem_disc_count_loss,
-    gvf_loss,
-    sr_discrep_loss_peter,
-    mem_gvf_loss,
-    dummy_loss,
-    mem_dummy_loss
+    mem_state_discrep,
+    obs_space_mem_discrep_loss
 )
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
@@ -80,16 +66,9 @@ def get_args():
                         help='For memory iteration, how many steps of policy improvement do we do per iteration?')
 
 
-    parser.add_argument('--policy_optim_alg', type=str, default='policy_grad',
+    parser.add_argument('--policy_optim_alg', type=str, default='policy_iter',
                         help='policy improvement algorithm to use. "policy_iter" - policy iteration, "policy_grad" - policy gradient, '
                              '"discrep_max" - discrepancy maximization, "discrep_min" - discrepancy minimization')
-
-    parser.add_argument('--gamma_type', default='fixed', choices=['fixed', 'uniform', 'normal'],
-                        help='Do we use observation-based gammas? (fixed | uniform | normal)')
-    parser.add_argument('--gamma_min', default=0., type=float,
-                        help="If we use uniform gamma_type, what's our minimum gamma?")
-    parser.add_argument('--gamma_max', default=1., type=float,
-                        help="If we use uniform gamma_type, what's our maximum gamma?")
 
     parser.add_argument('--optimizer', type=str, default='adam',
                         help='What optimizer do we use? (sgd | adam | rmsprop)')
@@ -98,8 +77,6 @@ def get_args():
                         help='How many random policies do we use for random kitchen sinks??')
     parser.add_argument('--leave_out_optimal', action='store_true',
                         help="Do we include the optimal policy when we select the initial policy")
-    parser.add_argument('--mem_aug_before_init_pi', action='store_true',
-                        help="Do we augment our memory before selecting the highest LD initial policy?")
     parser.add_argument('--n_mem_states', default=2, type=int,
                         help='for memory_id = 0, how many memory states do we have?')
 
@@ -118,11 +95,9 @@ def get_args():
                         help='Do we use (l2 | abs) for our discrepancies?')
     parser.add_argument('--epsilon', default=0.1, type=float,
                         help='(POLICY ITERATION AND TMAZE_EPS_HYPERPARAMS ONLY) What epsilon do we use?')
-    parser.add_argument('--reward_in_obs', action='store_true',
-                        help='Do we add reward into observation?')
 
-    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance', 'disc_count',
-                                                              'gvf_obs_rew', 'gvf_obs', 'dummy', 'sr_discrep_peter'])
+    # CURRENTLY NOT USED
+    parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'mem_state_discrep'])
 
     parser.add_argument('--study_name', default=None, type=str,
                         help='name of the experiment. Results saved to results/{experiment_name} directory if not None. Else, save to results directory directly.')
@@ -137,35 +112,27 @@ def get_args():
     return args
 
 
-def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callable):
-    print(f"in kitchen sink: Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
-    print(str(pomdp.Gamma_s))
-    batch_measures = jax.vmap(measure, in_axes=(0, None))
-    all_policy_measures, _, _ = batch_measures(policies, pomdp)
-    return policies[jnp.argmax(all_policy_measures)]
-
-def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
-                                mem_params: jnp.ndarray,
-                                pomdp: POMDP):
-    mem_policies = policies.repeat(mem_params.shape[-1], axis=1)
-    batch_measures = jax.vmap(mem_discrep_loss, in_axes=(None, 0, None))
+def get_mem_aug_kitchen_sink_policy(mem_params: jnp.ndarray,
+                                    mem_aug_pis: jnp.ndarray,
+                                    pomdp: POMDP, mem_measure: Callable):
+    # batch_measures = jax.vmap(mem_measure, in_axes=(None, 0, None))
+    # all_policy_measures = batch_measures(mem_params, mem_aug_pis, pomdp)
+    # return mem_aug_pis[jnp.argmax(all_policy_measures)]
+    mem_policies = mem_aug_pis[:, ::mem_params.shape[-1]].repeat(mem_params.shape[-1], axis=1)
+    batch_measures = jax.vmap(mem_measure, in_axes=(None, 0, None))
     all_policy_measures = batch_measures(mem_params, mem_policies, pomdp)
-    return policies[jnp.argmax(all_policy_measures)]
+    return mem_policies[jnp.argmax(all_policy_measures)]
 
 
-def make_experiment(args, rand_key: jax.random.PRNGKey):
+loss_map = {
+    'ld': mem_discrep_loss,
+    'tde': mem_tde_loss,
+    'tde_residual': mem_tde_loss,
+    'mem_state_discrep': mem_state_discrep
+}
 
-    loss_map = {
-        'ld': discrep_loss,
-        'tde': mstd_err,
-        'tde_residual': mstd_err,
-        'variance': variance_loss,
-        'disc_count': disc_count_loss,
-        'gvf_obs_rew': partial(gvf_loss, projection='obs_rew'),
-        'gvf_obs': partial(gvf_loss, projection='obs'),
-        'dummy': dummy_loss,
-        'sr_discrep_peter': sr_discrep_loss_peter
-    }
+
+def make_experiment(args):
 
     # Get POMDP definition
     pomdp, pi_dict = load_pomdp(args.spec,
@@ -173,25 +140,9 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                                 n_mem_states=args.n_mem_states,
                                 corridor_length=args.tmaze_corridor_length,
                                 discount=args.tmaze_discount,
-                                junction_up_pi=args.tmaze_junction_up_pi,
-                                reward_in_obs=args.reward_in_obs)
+                                junction_up_pi=args.tmaze_junction_up_pi)
 
-    pomdp_for_mem_optim = pomdp
-    if args.gamma_type != 'fixed':
-        rand_key, augment_gamma_key = jax.random.split(rand_key)
-        pomdp_for_mem_optim = augment_pomdp_gamma(pomdp, augment_gamma_key,
-                                                  augmentation=args.gamma_type,
-                                                  max_val=args.gamma_max,
-                                                  min_val=args.gamma_min)
-    pomdp = pomdp_for_mem_optim
-    print(f"Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
-    print(f"Gamma_s exists? {str(pomdp_for_mem_optim.Gamma_s is not None)}")
-    #else:
-    #    pomdp_for_mem_optim.Gamma_o = pomdp.gamma * np.eye(pomdp.observation_space.n)
-    #    pomdp_for_mem_optim.Gamma_s = pomdp.gamma * np.eye(pomdp.state_space.n)
-    
-    # zero out terminal rows in T
-    pomdp.T = make_subprob_matrix(pomdp.T)
+    objective = args.objective
 
 
     def experiment(rng: random.PRNGKey):
@@ -201,21 +152,25 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
         rng, mem_rng = random.split(rng)
 
+
         beginning_info = {}
         rng, pi_rng = random.split(rng)
-        pi_shape = (pomdp.observation_space.n, pomdp.action_space.n)
-        pi_paramses = reverse_softmax(get_unif_policies(pi_rng, pi_shape, args.random_policies + 1))
+        mem_aug_pi_shape = (int(pomdp.observation_space.n * args.n_mem_states), pomdp.action_space.n)
+
+        # pi_paramses is args.random_policies x (n_obs * n_mem_states) x n_actions
+        pi_paramses = reverse_softmax(get_unif_policies(pi_rng, mem_aug_pi_shape, args.random_policies + 1))
         updateable_pi_params = pi_paramses[-1]
 
-        beginning_info['pi_params'] = pi_paramses.copy()
-        beginning_info['measures'] = batch_log_all_measures(pomdp, pi_paramses)
-        # TODO:
-        # if args.gamma_type != 'fixed':
-        #     beginning_info['gamma_dependent_measures'] = batch_log_all_measures(pomdp_for_mem_optim, pi_paramses)
-        info['beginning'] = beginning_info
+        # We initialize mem params
+        mem_shape = (pomdp.action_space.n, pomdp.observation_space.n, args.n_mem_states, args.n_mem_states)
+        mem_params = random.normal(mem_rng, shape=mem_shape) * 0.5
 
-        # mem_aug_pi_paramses =
-        # beginning_info['all_init_mem_measures'] = jax.vmap(augment_and_log_all_measures, in_axes=(0, None, 0))(mem_params, pomdp, mem_aug_pi_paramses)
+        init_mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
+
+        beginning_info['pi_params'] = pi_paramses.copy()
+        beginning_info['measures'] = batch_log_all_measures(init_mem_aug_pomdp, pi_paramses)
+        beginning_info['init_mem_params'] = mem_params.copy()
+        info['beginning'] = beginning_info
 
         pi_optim = get_optimizer(args.optimizer, args.pi_lr)
         mi_optim = get_optimizer(args.optimizer, args.mi_lr)
@@ -238,45 +193,35 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
             return outs, {'v0': v_0, 'v': td_v_vals, 'q': td_q_vals}
 
         output_pi_tuple, init_pi_optim_info = jax.lax.scan(update_pg_step,
-                                                           (updateable_pi_params, pi_tx_params, pomdp),
+                                                           (updateable_pi_params, pi_tx_params, init_mem_aug_pomdp),
                                                            jnp.arange(args.pi_steps),
                                                            length=args.pi_steps)
 
-        memoryless_optimal_pi_params, _, _ = output_pi_tuple
+        init_optimal_pi_params, _, _ = output_pi_tuple
 
         after_pi_op_info = {}
-        after_pi_op_info['initial_improvement_pi_params'] = memoryless_optimal_pi_params
-        after_pi_op_info['initial_improvement_measures'] = log_all_measures(pomdp, memoryless_optimal_pi_params)
-        print("Learnt initial improvement policy:\n{}", nn.softmax(memoryless_optimal_pi_params, axis=-1))
+        after_pi_op_info['initial_improvement_pi_params'] = init_optimal_pi_params
+        after_pi_op_info['initial_improvement_measures'] = log_all_measures(init_mem_aug_pomdp, init_optimal_pi_params)
+        print("Learnt initial improvement policy over random mem:\n{}", nn.softmax(init_optimal_pi_params, axis=-1))
 
-        pis_with_memoryless_optimal = pi_paramses.at[-1].set(memoryless_optimal_pi_params)
+        pis_with_init_optimal = pi_paramses.at[-1].set(init_optimal_pi_params)
 
-        after_pi_op_info['all_tested_pi_params'] = pis_with_memoryless_optimal
+        after_pi_op_info['all_tested_pi_params'] = pis_with_init_optimal
         info['after_pi_op'] = after_pi_op_info
 
         if args.leave_out_optimal:
-            pis_with_memoryless_optimal = pi_paramses[:-1]
-
-        # We initialize mem params
-        mem_shape = (pomdp.action_space.n, pomdp.observation_space.n, args.n_mem_states, args.n_mem_states)
-        mem_params = random.normal(mem_rng, shape=mem_shape) * 0.5
+            pis_with_init_optimal = pi_paramses[:-1]
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
-        if args.mem_aug_before_init_pi:
-            measure_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
-        else:
-            # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
-            print(f"in experiment: Gamma_s exists? {str(pomdp_for_mem_optim.Gamma_s is not None)}")
-            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp_for_mem_optim, loss_map[args.objective])
+        measure_pi_params = get_mem_aug_kitchen_sink_policy(mem_params, pis_with_init_optimal, pomdp, loss_map[objective])
 
         pis_to_learn_mem = measure_pi_params
 
-        kitchen_sinks_info[args.objective] = measure_pi_params.copy()
+        kitchen_sinks_info[objective] = measure_pi_params.copy()
 
         mem_tx_params = mi_optim.init(mem_params)
 
-        info['beginning']['init_mem_params'] = mem_params.copy()
         info['after_kitchen_sinks'] = kitchen_sinks_info
 
         # Set up for batch memory iteration
@@ -301,27 +246,9 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                 partial_kwargs['residual'] = residual
             elif objective == 'obs_space':
                 mem_loss_fn = obs_space_mem_discrep_loss
-            elif args.objective == 'variance':
-                mem_loss_fn = mem_variance_loss
-            elif args.objective == 'disc_count':
-                mem_loss_fn = mem_disc_count_loss
-            elif args.objective == 'gvf_obs_rew':
-                mem_loss_fn = mem_gvf_loss
-                partial_kwargs['projection'] = 'obs_rew'
-            elif args.objective == 'gvf_obs':
-                mem_loss_fn = mem_gvf_loss
-                partial_kwargs['projection'] = 'obs'
-            elif args.objective == 'gvf_random_rew':
-                raise NotImplementedError
-                random_rew_key, self.rand_key = random.split(self.rand_key)
-                # random_reward = random.normal(random_rew_key, shape=)
-            elif args.objective == 'dummy':
-                mem_loss_fn = mem_dummy_loss
-
-            mem_loss_fn = partial(mem_loss_fn, **partial_kwargs)
 
             pi = jax.nn.softmax(pi_params, axis=-1)
-            loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp_for_mem_optim)
+            loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pi, pomdp)
 
             updates, mem_tx_params = mi_optim.update(params_grad, mem_tx_params, mem_params)
             new_mem_params = optax.apply_updates(mem_params, updates)
@@ -329,7 +256,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
             return new_mem_params, pi_params, mem_tx_params, loss
 
         # Make our vmapped memory function
-        update_step = partial(update_mem_step,objective=args.objective, residual='residual' in args.objective)
+        update_step = partial(update_mem_step, objective=objective, residual='residual' in objective)
 
         def scan_wrapper(inps, i, f: Callable):
             mem_params, pi_params, mem_tx_params = inps
@@ -339,17 +266,18 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         scan_tqdm_dec = scan_tqdm(args.mi_steps)
         update_step = scan_tqdm_dec(partial(scan_wrapper, f=update_step))
 
-        mem_aug_pi_paramses = new_pi_over_mem(pis_to_learn_mem, args.n_mem_states)
-        batch_mem_log_all_measures = augment_and_log_all_measures
+        # mem_aug_pi_paramses = new_pi_over_mem(pis_to_learn_mem, args.n_mem_states)
+        mem_aug_pi_paramses = pis_to_learn_mem
         mem_input_tuple = (mem_params, mem_aug_pi_paramses, mem_tx_params)
 
         # Memory iteration for all of our measures
-        print(f"Starting {args.mi_steps} iterations of {args.objective} minimization")
+        print("Starting {} iterations of memory improvement", args.mi_steps)
         updated_mem_out, (losses, all_mem_params) = jax.lax.scan(update_step, mem_input_tuple, jnp.arange(args.mi_steps), length=args.mi_steps)
-        updated_mem_paramses, ld_pi_paramses, _ = updated_mem_out
-        updated_mem_info = {'mems': updated_mem_paramses,
+        updated_mem_params, updated_mem_pi_params, _ = updated_mem_out
+        updated_mem_aug_pomdp = memory_cross_product(updated_mem_params, pomdp)
+        updated_mem_info = {'mems': updated_mem_params,
                             'all_mem_params': all_mem_params[::args.save_mem_freq],
-                            'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp_for_mem_optim, ld_pi_paramses)}
+                            'measures': log_all_measures(updated_mem_aug_pomdp, updated_mem_pi_params)}
 
         info['after_mem_op'] = updated_mem_info
 
@@ -364,31 +292,28 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                                                                length=args.pi_steps)
             return output_pi_tuple, pi_optim_info
 
-        # Get our parameters ready for batch policy improvement
-        all_mem_paramses = updated_mem_paramses
-
         # now we do policy improvement over the learnt memory
         # reset pi indices, and mem_augment
         rng, pi_rng = random.split(rng)
-        new_pi_paramses = reverse_softmax(get_unif_policies(pi_rng, pi_shape, 1))[0]
-        mem_aug_pi_paramses = new_pi_paramses.repeat(mem_params.shape[-1], axis=0)
+        new_pi_paramses = reverse_softmax(get_unif_policies(pi_rng, mem_aug_pi_shape, 1))[0]
+        mem_aug_pi_paramses = new_pi_paramses
+        # mem_aug_pi_paramses = new_pi_paramses.repeat(mem_params.shape[-1], axis=0)
 
         # Use the same initial random pi params across all final policy improvements.
         all_mem_aug_pi_params = mem_aug_pi_paramses
         all_mem_pi_tx_paramses = pi_optim.init(all_mem_aug_pi_params)
 
         # Batch policy improvement with PG
-        all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(all_mem_paramses, all_mem_aug_pi_params,
+        all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(updated_mem_params, all_mem_aug_pi_params,
                                                                            all_mem_pi_tx_paramses)
 
         # Retrieve each set of learned pi params
         all_improved_pi_params, _, _ = all_improved_pi_tuple
-        ld_improved_pi_params = all_improved_pi_params
+        mem_improved_pi_params = all_improved_pi_params
 
         final_info = {
-            'improved_mem': {
-                'pi_params': ld_improved_pi_params,
-                'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_improved_pi_params)},
+            'improved_mem': {'pi_params': mem_improved_pi_params,
+                             'measures': log_all_measures(updated_mem_aug_pomdp, mem_improved_pi_params)},
         }
 
         info['final'] = final_info
@@ -400,7 +325,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
 if __name__ == "__main__":
     start_time = time()
-    jax.disable_jit(True)
+    # jax.disable_jit(True)
 
     args = get_args()
 
@@ -412,11 +337,9 @@ if __name__ == "__main__":
     rngs = random.split(rng, args.n_seeds + 1)
     rng, exp_rngs = rngs[-1], rngs[:-1]
 
-    rng, make_rng = jax.random.split(rng)
-
     t0 = time()
-    #experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
-    experiment_vjit_fn = jax.vmap(make_experiment(args, make_rng))
+    experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args)))
+
     # Run the experiment!
     # results will be batched over (n_seeds, random_policies + 1).
     # The + 1 is for the TD optimal policy.
@@ -440,5 +363,6 @@ if __name__ == "__main__":
         f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values']):.4f}"
     )
     print(f"Final performance after MI: {perf_from_stats(outs['final']['improved_mem']['measures']['values']):.4f}")
+
     print(f"Saving results to {results_path}")
     numpyify_and_save(results_path, info)

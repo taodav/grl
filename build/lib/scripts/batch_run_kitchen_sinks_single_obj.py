@@ -138,8 +138,6 @@ def get_args():
 
 
 def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callable):
-    print(f"in kitchen sink: Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
-    print(str(pomdp.Gamma_s))
     batch_measures = jax.vmap(measure, in_axes=(0, None))
     all_policy_measures, _, _ = batch_measures(policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
@@ -183,9 +181,6 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                                                   augmentation=args.gamma_type,
                                                   max_val=args.gamma_max,
                                                   min_val=args.gamma_min)
-    pomdp = pomdp_for_mem_optim
-    print(f"Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
-    print(f"Gamma_s exists? {str(pomdp_for_mem_optim.Gamma_s is not None)}")
     #else:
     #    pomdp_for_mem_optim.Gamma_o = pomdp.gamma * np.eye(pomdp.observation_space.n)
     #    pomdp_for_mem_optim.Gamma_s = pomdp.gamma * np.eye(pomdp.state_space.n)
@@ -200,6 +195,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         batch_log_all_measures = jax.vmap(log_all_measures, in_axes=(None, 0))
 
         rng, mem_rng = random.split(rng)
+
 
         beginning_info = {}
         rng, pi_rng = random.split(rng)
@@ -267,7 +263,6 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
             measure_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
         else:
             # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
-            print(f"in experiment: Gamma_s exists? {str(pomdp_for_mem_optim.Gamma_s is not None)}")
             measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp_for_mem_optim, loss_map[args.objective])
 
         pis_to_learn_mem = measure_pi_params
@@ -400,7 +395,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
 if __name__ == "__main__":
     start_time = time()
-    jax.disable_jit(True)
+    # jax.disable_jit(True)
 
     args = get_args()
 
@@ -415,8 +410,8 @@ if __name__ == "__main__":
     rng, make_rng = jax.random.split(rng)
 
     t0 = time()
-    #experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
-    experiment_vjit_fn = jax.vmap(make_experiment(args, make_rng))
+    experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
+
     # Run the experiment!
     # results will be batched over (n_seeds, random_policies + 1).
     # The + 1 is for the TD optimal policy.

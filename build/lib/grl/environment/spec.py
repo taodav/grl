@@ -196,8 +196,8 @@ def load_pomdp(name: str,
     if reward_in_obs:
         spec = add_rewards_in_obs(spec)
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'], rand_key=rand_key)
-    Gamma_o = spec['gamma'] * np.eye(spec['phi'].shape[-1], dtype=float)
-    Gamma_s = spec['gamma'] * np.eye(spec['T'].shape[-1], dtype=float)
+    Gamma_o = spec['gamma'] * np.eye(spec['phi'].shape[-1])
+    Gamma_s = spec['gamma'] * np.eye(spec['T'].shape[-1])
     pomdp = POMDP(mdp, spec['phi'], Gamma_o=Gamma_o, Gamma_s=Gamma_s)
     return pomdp, {'Pi_phi': spec['Pi_phi'], 'Pi_phi_x': spec['Pi_phi_x']}
 

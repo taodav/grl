@@ -1,0 +1,7 @@
+                             ∆ K  ∆ SR_sasa  ∆ Q_sa  ∆ Q_wa  Δ SF_oasa  Δ SF_oaoa_yellow_red  Δ SF_oaoa_blue_red  Δ SF_TD_yellow_blue  Δ SR
+spec                                                                                                                                       
+ld_zero_by_mdp            0.0000     0.0000  0.0000     0.0     0.0000                  0.00                 0.0                 0.00   0.0
+ld_zero_by_k_equality     0.0000     0.0000  0.0000     0.0     0.0000                  0.50                 0.0                 0.50   0.0
+ld_zero_by_t_projection   0.4998     0.0000  0.0000     0.0     0.0000                  0.25                 0.0                 0.25   0.0
+ld_zero_by_r_projection   0.9889     8.9000  0.0000     0.0     2.4099                  1.00                 0.0                 1.00   0.0
+ld_zero_by_wr_projection  0.9703     8.7324  0.8966     0.0     3.1345                  1.00                 0.0                 1.00   0.0

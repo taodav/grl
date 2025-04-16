@@ -230,9 +230,6 @@ class BlockMDP(MDP):
 
 @register_pytree_node_class
 class POMDP(MDP):
-    #Gamma_o: np.ndarray
-    #Gamma_s: np.ndarray
-
     def __init__(self, base_mdp: MDP, phi, Gamma_s: np.ndarray=None, Gamma_o: np.ndarray=None):
         super().__init__(base_mdp.T, base_mdp.R, base_mdp.p0, base_mdp.gamma,
                          base_mdp.terminal_mask)
