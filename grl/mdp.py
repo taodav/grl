@@ -233,15 +233,11 @@ class POMDP(MDP):
     #Gamma_o: np.ndarray
     #Gamma_s: np.ndarray
 
-    def __init__(self, base_mdp: MDP, phi, Gamma_s: np.ndarray=None, Gamma_o: np.ndarray=None):
+    def __init__(self, base_mdp: MDP, phi):
         super().__init__(base_mdp.T, base_mdp.R, base_mdp.p0, base_mdp.gamma,
                          base_mdp.terminal_mask)
         self.base_mdp = copy.deepcopy(base_mdp)
         self.phi = phi # array: base_mdp.state_space.n, n_abstract_states
-        self.Gamma_o = Gamma_o
-        self.Gamma_s = Gamma_s
-        #self.Gamma_s = base_mdp.gamma * jnp.eye(self.base_mdp.state_space.n)
-        #self.Gamma_o = base_mdp.gamma * jnp.eye(self.base_mdp.observation_space.n)
 
     def tree_flatten(self):
         children = (self.T, self.R, self.p0, self.gamma, self.terminal_mask,
@@ -318,6 +314,14 @@ class POMDP(MDP):
         mdp = MDP.generate(n_states, n_actions, sparsity, gamma, Rmin, Rmax)
         phi = random_stochastic_matrix(size=(n_states, n_obs))
         return cls(mdp, phi)
+
+class POMDPG(POMDP):
+    def __init__(self, base_mdp: MDP, phi, Gamma_s: np.ndarray, Gamma_o: np.ndarray):
+        super().__init__(base_mdp, phi)
+        self.Gamma_o = Gamma_o
+        self.Gamma_s = Gamma_s
+        #self.Gamma_s = base_mdp.gamma * jnp.eye(self.base_mdp.state_space.n)
+        #self.Gamma_o = base_mdp.gamma * jnp.eye(self.base_mdp.observation_space.n)
 
 class UniformPOMDP(POMDP):
     def __init__(self, base_mdp, phi, pi=None, p0=None):

@@ -11,7 +11,7 @@ from jax.scipy.stats import norm
 
 from definitions import ROOT_DIR
 from grl.environment.pomdp_file import POMDPFile
-from grl.mdp import MDP, POMDP
+from grl.mdp import MDP, POMDP, POMDPG
 from grl.environment.aliasing import map_to_strict_aliasing
 from grl.utils.math import normalize
 from . import examples_lib
@@ -196,9 +196,9 @@ def load_pomdp(name: str,
     if reward_in_obs:
         spec = add_rewards_in_obs(spec)
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'], rand_key=rand_key)
-    Gamma_o = spec['gamma'] * np.eye(spec['phi'].shape[-1], dtype=float)
-    Gamma_s = spec['gamma'] * np.eye(spec['T'].shape[-1], dtype=float)
-    pomdp = POMDP(mdp, spec['phi'], Gamma_o=Gamma_o, Gamma_s=Gamma_s)
+    # Gamma_o = spec['gamma'] * np.eye(spec['phi'].shape[-1], dtype=float)
+    # Gamma_s = spec['gamma'] * np.eye(spec['T'].shape[-1], dtype=float)
+    pomdp = POMDP(mdp, spec['phi'])
     return pomdp, {'Pi_phi': spec['Pi_phi'], 'Pi_phi_x': spec['Pi_phi_x']}
 
 
@@ -208,7 +208,7 @@ def augment_pomdp_gamma(pomdp: POMDP,
                         scale: float = None,
                         min_val: float = 0.,
                         max_val: float = 1.):
-    pomdp = deepcopy(pomdp)
+    mdp = deepcopy(pomdp.base_mdp)
     """
     TODO: these augmentations assume observation-conditioned gammas, but 
     we implement them as state-conditioned gammas
@@ -262,10 +262,11 @@ def augment_pomdp_gamma(pomdp: POMDP,
         state_gammas[s] = obs_gammas[phi[s]]
     Gamma_s = np.diag(state_gammas)
 
-    pomdp.Gamma_o = Gamma_o
-    pomdp.Gamma_s = Gamma_s
+    new_pomdp = POMDPG(mdp, pomdp.phi, Gamma_o=Gamma_o, Gamma_s=Gamma_s)
+    # pomdp.Gamma_o = Gamma_o
+    # pomdp.Gamma_s = Gamma_s
 
-    return pomdp
+    return new_pomdp
 
 
 def make_subprob_matrix(T):
