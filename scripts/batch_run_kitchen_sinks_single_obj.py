@@ -250,11 +250,12 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
+        pis_to_consider = nn.softmax(pis_with_memoryless_optimal, axis=-1)
         if args.mem_aug_before_init_pi:
-            measure_pi_params = get_mem_kitchen_sink_policy(pis_with_memoryless_optimal, mem_params, pomdp)
+            measure_pi_params = get_mem_kitchen_sink_policy(pis_to_consider, mem_params, pomdp)
         else:
-            # measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp, discrep_loss)
-            measure_pi_params = get_kitchen_sink_policy(pis_with_memoryless_optimal, pomdp_for_mem_optim, loss_map[args.objective])
+            # measure_pi_params = get_kitchen_sink_policy(pis_to_consider, pomdp, discrep_loss)
+            measure_pi_params = get_kitchen_sink_policy(pis_to_consider, pomdp, loss_map[args.objective])
 
         pis_to_learn_mem = measure_pi_params
 

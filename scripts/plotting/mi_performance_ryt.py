@@ -38,6 +38,7 @@ belief_perf = {
 # ]
 
 title = 'SF (reward bucket) w/ obs-dependent gamma (U[0.8, 0.99])'
+# title = 'SF w/ fixed gamma'
 experiment_dirs = [
     Path(ROOT_DIR, 'results', 'dummy_pg_kitchen'),
 
@@ -100,7 +101,7 @@ residual = False
 alpha = 1.
 filtered_df = all_res_df[
 # (all_res_df['residual'] == residual) &
-((all_res_df['gamma_type'] == 'fixed') | (all_res_df['gamma_type'] == 'uniform')) &
+((all_res_df['gamma_type'] == 'fixed') | (all_res_df['gamma_type'] == 'normal')) &
 (all_res_df['alpha'] == alpha)
 ].reset_index()
 
