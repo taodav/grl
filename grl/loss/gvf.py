@@ -8,8 +8,8 @@ from grl.environment import load_pomdp
 from grl.loss.ld import weight_and_sum_discrep_loss
 # from grl.loss.sr import sr_lstd_lambda
 from grl.loss.sr import sr_lambda, sf_lambda
-from grl.mdp import POMDP, MDP
-from grl.memory import memory_cross_product
+from grl.mdp import MDP, POMDP, POMDPG
+from grl.memory import memory_cross_product, memory_cross_product_G
 from grl.utils.mdp_solver import get_p_s_given_o
 
 
@@ -41,11 +41,13 @@ def kron(a, b):
 def ddot(a, b):
     return jnp.tensordot(a, b, axes=2)
 
+def dot(a, b):
+    return jnp.tensordot(a, b, axes=1)
+
 def sr_discrep_loss_peter(
         pi: jnp.ndarray,
         pomdp: Union[MDP, POMDP]):
-    print(f"in loss: Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
-    print(pomdp.Gamma_s)
+    #print(f"in loss: Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
     n_states = pomdp.state_space.n
     n_actions = pomdp.action_space.n
     n_obs = pomdp.observation_space.n
@@ -59,24 +61,41 @@ def sr_discrep_loss_peter(
     T_pi = jnp.einsum("ik,ikj->ij", pi_s, T)
 
     # calculate W
+    #jax.debug.print("gamma: {}", pomdp.gamma)
+    #jax.debug.print("p0: {}", pomdp.p0)
+    #jax.debug.print("T_pi: {}", T_pi)  # negative entries
     Pr_s = jnp.linalg.inv(I_S - pomdp.gamma * T_pi.T).dot(pomdp.p0)
     Pr_s = Pr_s / jnp.sum(Pr_s)
+    #jax.debug.print("Pr_s {}:", Pr_s)
     W = Pr_s[None, ...] *  pomdp.phi.T
-    W = W / jnp.sum(W, axis=1)[..., None]
+    #jax.debug.print("W cross sums before {}:", jnp.sum(W, axis=1))
+    W = W / jnp.maximum(jnp.sum(W, axis=1)[..., None], 1e-8)
 
+    #jax.debug.print("W cross sums after {}:", jnp.sum(W, axis=1))
     # (o, o, 1) * (1, o, a) -> (o, o, a), so Pi(o1,o2,a) = delta(o1,o2) pi(a|o1)
     Pi = jnp.eye(n_obs)[..., None] * pi[None, ...]
     Pi_s = jnp.eye(n_states)[..., None] * pi_s[None, ...]
-    # (o, a), (o, a, s, a) -> (s, a)
+    # (o, o, a), (o, a, s, a) -> (o, s, a)
+
     W_Pi = ddot(Pi, kron(W, I_A))
+    #jax.debug.print("gamma {}:", pomdp.Gamma_s)
+    #jax.debug.print("Pi_s {}:", Pi_s)
+    #jax.debug.print("T {}:", T)
     SR_MC_SS = jnp.linalg.inv(I_S - pomdp.Gamma_s @ ddot(Pi_s, T))
-    SR_TD_SS = jnp.linalg.inv(I_S - pomdp.Gamma_s @ ddot((pomdp.phi @ W_Pi), T))
+    #jax.debug.print("mc {}:", SR_MC_SS)
+    
+    #jax.debug.print("phi {}:", pomdp.phi)
+    #jax.debug.print("W_Pi {}:", W_Pi)
+    SR_TD_SS = jnp.linalg.inv(I_S - pomdp.Gamma_s @ ddot(dot(pomdp.phi, W_Pi), T))
+    #jax.debug.print("td {}:", SR_TD_SS)
 
     SR_MC = I_O + pomdp.Gamma_o @ ddot(W_Pi, T) @ SR_MC_SS @ pomdp.phi
     SR_TD = I_O + pomdp.Gamma_o @ ddot(W_Pi, T) @ SR_TD_SS @ pomdp.phi
 
     Pr_o = Pr_s @ pomdp.phi
-    return jnp.sqrt(Pr_o @ jnp.sum((SR_MC - SR_TD)**2, axis=1))
+    loss = jnp.sqrt(Pr_o @ jnp.sum((SR_MC - SR_TD)**2, axis=1))
+
+    return loss, None, None
 
 def gvf_loss(pi: jnp.ndarray,
              pomdp: Union[MDP, POMDP],
@@ -175,6 +194,23 @@ def mem_gvf_loss(
                           proj=proj,
                           alpha=alpha,
                           flip_count_prob=flip_count_prob)
+    return loss
+
+def mem_sr_discrep_loss(
+        mem_params: jnp.ndarray,
+        pi: jnp.ndarray,
+        pomdp: POMDPG,  # input non-static arrays
+        value_type: str = 'q',
+        error_type: str = 'l2',
+        lambda_0: float = 0.,
+        lambda_1: float = 1.,
+        projection: str = 'obs_rew',  # ['obs_rew', 'obs']
+        proj: jnp.ndarray = None,
+        alpha: float = 1.,
+        flip_count_prob: bool = False):  # initialize with partial
+    mem_aug_pomdp = memory_cross_product_G(mem_params, pomdp)
+    loss, _, _ = sr_discrep_loss_peter(pi, mem_aug_pomdp)
+    #jax.debug.print("Loss: {}", loss)
     return loss
 
 

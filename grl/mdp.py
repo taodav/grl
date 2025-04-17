@@ -315,6 +315,7 @@ class POMDP(MDP):
         phi = random_stochastic_matrix(size=(n_states, n_obs))
         return cls(mdp, phi)
 
+@register_pytree_node_class
 class POMDPG(POMDP):
     def __init__(self, base_mdp: MDP, phi, Gamma_s: np.ndarray, Gamma_o: np.ndarray):
         super().__init__(base_mdp, phi)
@@ -322,6 +323,22 @@ class POMDPG(POMDP):
         self.Gamma_s = Gamma_s
         #self.Gamma_s = base_mdp.gamma * jnp.eye(self.base_mdp.state_space.n)
         #self.Gamma_o = base_mdp.gamma * jnp.eye(self.base_mdp.observation_space.n)
+
+    def tree_flatten(self):
+        children = (self.T, self.R, self.p0, self.gamma, self.terminal_mask,
+                    self.phi, self.Gamma_s, self.Gamma_o)
+        aux_data = None
+        return (children, aux_data)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        mdp = MDP(*children[:-3])
+        return cls(mdp, *children[-3:])
+
+    def __repr__(self):
+        base_str = super().__repr__()
+        return base_str + '\n' + repr(self.Gamma_s) + '\n' + repr(self.Gamma_o)
+
 
 class UniformPOMDP(POMDP):
     def __init__(self, base_mdp, phi, pi=None, p0=None):
