@@ -45,6 +45,7 @@ from grl.loss import (
     mem_gvf_loss,
     sr_discrep_loss_peter,
     mem_sr_discrep_loss,
+    mem_sr_discrep_loss_for_gamma_optim,
     dummy_loss,
     mem_dummy_loss
 )
@@ -95,6 +96,8 @@ def get_args():
                         help="If we use uniform gamma_type, what's our maximum gamma?")
     parser.add_argument('--num_gammas', default=1, type=int,
                         help="if not using fixed gamma, how many (sets of) observation dep gammas do you want?")
+    parser.add_argument('--gamma_steps', default=0, type=int,
+                        help='For gamma optimisation, how many optimisation steps do we do per iteration?')
 
     parser.add_argument('--optimizer', type=str, default='adam',
                         help='What optimizer do we use? (sgd | adam | rmsprop)')
@@ -117,6 +120,7 @@ def get_args():
                         help='Temperature parameter, for how uniform our lambda-discrep weighting is')
     parser.add_argument('--pi_lr', default=0.01, type=float)
     parser.add_argument('--mi_lr', default=0.01, type=float)
+    parser.add_argument('--gamma_lr', default=0.01, type=float)
     parser.add_argument('--value_type', default='q', type=str,
                         help='Do we use (v | q) for our discrepancies?')
     parser.add_argument('--error_type', default='l2', type=str,
@@ -245,8 +249,10 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
         pi_optim = get_optimizer(args.optimizer, args.pi_lr)
         mi_optim = get_optimizer(args.optimizer, args.mi_lr)
+        gamma_optim = get_optimizer(args.optimizer, args.gamma_lr)
 
         pi_tx_params = pi_optim.init(updateable_pi_params)
+        gamma_tx_params = gamma_optim.init(pomdp.gamma_o)
 
         print("Running initial policy improvement")
         @scan_tqdm(args.pi_steps)
@@ -309,6 +315,26 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
         info['beginning']['init_mem_params'] = mem_params.copy()
         info['after_kitchen_sinks'] = kitchen_sinks_info
+
+        @scan_tqdm(args.gamma_steps)
+        def update_gamma_step(inps, i):
+            gamma_params, gamma_tx_params, mem_params, pi_params = inps
+
+            mem_loss_fn = mem_sr_discrep_loss_for_gamma_optim
+
+            pi = jax.nn.softmax(pi_params, axis=-1)
+            loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(gamma_params, mem_params, pi, pomdp, args.gamma_min, args.gamma_max)
+
+            params_grad = -params_grad  # we want to maximise the memory loss
+
+            updates, gamma_tx_params = gamma_optim.update(params_grad, gamma_tx_params, gamma_params)
+            new_gamma_params = optax.apply_updates(gamma_params, updates)
+
+            return (new_gamma_params, gamma_tx_params, mem_params, pi_params), {'loss': loss}
+
+        memoryless_optimal_pi_params, _, _ = output_pi_tuple
+
+
 
         # Set up for batch memory iteration
         def update_mem_step(mem_params: jnp.ndarray,
@@ -411,6 +437,29 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
             performance = (v * mem_pomdp.p0).sum(axis=-1).mean()
             jax.debug.print("Performance: {}", performance)
             return output_pi_tuple, pi_optim_info
+        
+
+        # optimise gamma
+        def logit(x):
+            return jnp.log(x / (1-x))
+
+        if args.gamma_steps > 0:
+            print("Optimising gamma...")
+            print("Pre-optimsiation gamma:\n{}", pomdp.gamma_o)
+            #gamma_params = jnp.arctanh(pomdp.gamma_o)
+            gamma_params = logit((pomdp.gamma_o - args.gamma_min) / (args.gamma_max - args.gamma_min))
+            output_gamma_tuple, optim_info = jax.lax.scan(update_gamma_step,
+                                                               (gamma_params, gamma_tx_params, mem_params, mem_aug_pi_paramses),
+                                                               jnp.arange(args.gamma_steps),
+                                                               length=args.gamma_steps)
+        
+            new_gamma_params, _, _, _ = output_gamma_tuple
+            new_gamma_o = args.gamma_min + (args.gamma_max - args.gamma_min) * jax.nn.sigmoid(new_gamma_params)
+            pomdp.set_gamma_o(new_gamma_o)
+            print("Post-gamma optimisation memory loss: {}", optim_info['loss'][-1])
+            print("Post-optimsiation gamma:\n{}", new_gamma_o)
+        else:
+            print("gamma:\n{}", pomdp.gamma_o)
 
         # Get our parameters ready for batch policy improvement
         all_mem_paramses = improve_mem(mem_params, mem_aug_pi_paramses, mem_tx_params) # updated_mem_paramses
@@ -441,8 +490,8 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         #all_improved_pi_params, _, _ = all_improved_pi_tuple
         ld_improved_pi_params = all_improved_pi_params
 
-        jax.debug.print("Final memory:\n{}", str(jax.nn.softmax(updated_mem_paramses)))
-        jax.debug.print("Final policy:\n{}", str(jax.nn.softmax(ld_improved_pi_params)))
+        #jax.debug.print("Final memory:\n{}", str(jax.nn.softmax(updated_mem_paramses)))
+        #jax.debug.print("Final policy:\n{}", str(jax.nn.softmax(ld_improved_pi_params)))
 
         #_, augment_gamma_key = jax.random.split(rng)
         #new_pomdp = augment_pomdp_gamma(pomdp, augment_gamma_key,

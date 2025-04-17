@@ -334,7 +334,7 @@ class POMDPG(POMDP):
         k = diag.shape[-1]
         return diag[..., :, None] * jnp.eye(k)
     
-    def update_gamma_o(self, gamma_o):
+    def set_gamma_o(self, gamma_o):
         self.gamma_o = gamma_o
 
     def tree_flatten(self):

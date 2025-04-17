@@ -4,9 +4,11 @@ python -m scripts.batch_run_kitchen_sinks_single_obj --spec parity_check --polic
 
 N seed 2025 (initial loss 0.00029): 0 performance, memory gets stuck seemingly in local minimum (even at 100k MI)
     -> it DOES solve if gamma_min = 0.6 (initial loss 0.0006)
+    -> it DOES also solve with gamma_min = 0.5 in 50k iterations with num_gammas = 5
 Y seed 20223415 (initial loss 0.0067): 0.81=optimal perf (after 1st round) and 0 mem loss (1e-6 after 1st round, 1e-8 after 2nd)
 N seed 123415 (initial loss 0.00057): gets stuck (perf 0.07) even at 100k MI
     -> it DOES solve if gamma_min = 0.6 (then initial loss 0.0012)
+    -> it DOES also solve with gamma_min = 0.85 in 50k iterations with num_gammas = 5
 Y seed 973415 (initial loss 0.0052): solves at 100k (optimal perf 0.81, mem loss 1e-10) (but only perf 0.13 at 20k MI)
 Y seed 394825 (initial loss 0.0022): solves at 100k (optimal perf 0.81, mem loss 1e-10) (but doesnt solve it yet at 20k)
 

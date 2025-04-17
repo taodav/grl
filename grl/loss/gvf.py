@@ -202,6 +202,19 @@ def mem_gvf_loss(
                           flip_count_prob=flip_count_prob)
     return loss
 
+def mem_sr_discrep_loss_for_gamma_optim(
+        gamma_params: jnp.ndarray,
+        mem_params: jnp.ndarray,
+        pi: jnp.ndarray,
+        pomdp: POMDPG,
+        gamma_min: float = 0.0,
+        gamma_max: float = 1.0):
+    gamma_o = gamma_min + (gamma_max - gamma_min) * jax.nn.sigmoid(gamma_params)
+    pomdp.set_gamma_o(gamma_o)
+    mem_aug_pomdp = memory_cross_product_G(mem_params, pomdp)
+    loss, _, _ = sr_discrep_loss_peter(pi, mem_aug_pomdp)
+    return loss
+    
 def mem_sr_discrep_loss(
         mem_params: jnp.ndarray,
         pi: jnp.ndarray,
