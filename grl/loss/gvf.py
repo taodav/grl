@@ -46,8 +46,7 @@ def dot(a, b):
 
 def sr_discrep_loss_peter(
         pi: jnp.ndarray,
-        pomdp: Union[MDP, POMDP]):
-    #print(f"in loss: Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
+        pomdp: POMDPG):
     n_states = pomdp.state_space.n
     n_actions = pomdp.action_space.n
     n_obs = pomdp.observation_space.n
@@ -81,19 +80,26 @@ def sr_discrep_loss_peter(
     #jax.debug.print("gamma {}:", pomdp.Gamma_s)
     #jax.debug.print("Pi_s {}:", Pi_s)
     #jax.debug.print("T {}:", T)
-    SR_MC_SS = jnp.linalg.inv(I_S - pomdp.Gamma_s @ ddot(Pi_s, T))
-    #jax.debug.print("mc {}:", SR_MC_SS)
+    Gamma_s = pomdp.get_Gamma_s()  # (n_gammas, s, s)
+    Gamma_o = pomdp.get_Gamma_o()  # (n_gammas, o, o)
+    SR_MC_SS = jnp.linalg.inv(I_S - Gamma_s @ ddot(Pi_s, T))
+    #jax.debug.print("mc shape {}:", SR_MC_SS.shape)
     
     #jax.debug.print("phi {}:", pomdp.phi)
     #jax.debug.print("W_Pi {}:", W_Pi)
-    SR_TD_SS = jnp.linalg.inv(I_S - pomdp.Gamma_s @ ddot(dot(pomdp.phi, W_Pi), T))
+    SR_TD_SS = jnp.linalg.inv(I_S - Gamma_s @ ddot(dot(pomdp.phi, W_Pi), T))
     #jax.debug.print("td {}:", SR_TD_SS)
 
-    SR_MC = I_O + pomdp.Gamma_o @ ddot(W_Pi, T) @ SR_MC_SS @ pomdp.phi
-    SR_TD = I_O + pomdp.Gamma_o @ ddot(W_Pi, T) @ SR_TD_SS @ pomdp.phi
+    SR_MC = I_O + Gamma_o @ ddot(W_Pi, T) @ SR_MC_SS @ pomdp.phi
+    SR_TD = I_O + Gamma_o @ ddot(W_Pi, T) @ SR_TD_SS @ pomdp.phi
+
+    #jax.debug.print("shape: {}", SR_MC.shape)
 
     Pr_o = Pr_s @ pomdp.phi
-    loss = jnp.sqrt(Pr_o @ jnp.sum((SR_MC - SR_TD)**2, axis=1))
+    # SR_MC - SR_TD has shape (n_gammas, o, o). we square, sum over last dimension,
+    # weight middle dimension by Pr_o, then sum over first dimension and take the sq root
+    loss = jnp.sqrt((jnp.sum((SR_MC - SR_TD)**2, axis=-1) @ Pr_o).sum())
+    #jax.debug.print("loss: {}", loss)
 
     return loss, None, None
 

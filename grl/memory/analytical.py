@@ -75,10 +75,11 @@ def memory_cross_product_G(mem_params: jnp.ndarray, pomdp: POMDPG):
     if not isinstance(pomdp.gamma, float) and len(gamma.shape) > 0:
         gamma = gamma.repeat(n_states_m, axis=0)
 
-    Gamma_s = pomdp.Gamma_s
-    Gamma_s = jnp.diag(jnp.repeat(jnp.diag(Gamma_s), n_states_m))
-    Gamma_o = pomdp.Gamma_o
-    Gamma_o = jnp.diag(jnp.repeat(jnp.diag(Gamma_o), n_states_m))
+    #Gamma_s = pomdp.Gamma_s
+    #Gamma_s = jnp.diag(jnp.repeat(jnp.diag(Gamma_s), n_states_m))
+    #Gamma_o = pomdp.Gamma_o
+    #Gamma_o = jnp.diag(jnp.repeat(jnp.diag(Gamma_o), n_states_m))
+    gamma_o = jnp.repeat(pomdp.gamma_o, n_states_m, axis=-1)
     mem_aug_mdp = MDP(T_x, R_x, p0_x, gamma=gamma, terminal_mask=new_terminal_mask)
 
-    return POMDPG(mem_aug_mdp, phi_x, Gamma_s, Gamma_o)
+    return POMDPG(mem_aug_mdp, phi_x, gamma_o)

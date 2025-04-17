@@ -93,6 +93,8 @@ def get_args():
                         help="If we use uniform gamma_type, what's our minimum gamma?")
     parser.add_argument('--gamma_max', default=1., type=float,
                         help="If we use uniform gamma_type, what's our maximum gamma?")
+    parser.add_argument('--num_gammas', default=1, type=int,
+                        help="if not using fixed gamma, how many (sets of) observation dep gammas do you want?")
 
     parser.add_argument('--optimizer', type=str, default='adam',
                         help='What optimizer do we use? (sgd | adam | rmsprop)')
@@ -159,7 +161,6 @@ def get_optimal_one_bit_memory_parity_check():
 
 
 def get_kitchen_sink_policy(policies: jnp.ndarray, pomdp: POMDP, measure: Callable):
-    #print(f"in kitchen sink: Gamma_s exists? {str(pomdp.Gamma_s is not None)}")
     batch_measures = jax.vmap(measure, in_axes=(0, None))
     all_policy_measures, _, _ = batch_measures(policies, pomdp)
     return policies[jnp.argmax(all_policy_measures)]
@@ -202,11 +203,13 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         pomdp_for_mem_optim = augment_pomdp_gamma(pomdp, augment_gamma_key,
                                                   augmentation=args.gamma_type,
                                                   max_val=args.gamma_max,
-                                                  min_val=args.gamma_min)
+                                                  min_val=args.gamma_min,
+                                                  num_gammas=args.num_gammas)
     else:
-        Gamma_s = pomdp.gamma * np.eye(pomdp.state_space.n)
-        Gamma_o = pomdp.gamma * np.eye(pomdp.observation_space.n)
-        pomdp_for_mem_optim = POMDPG(pomdp.base_mdp, pomdp.phi, Gamma_s, Gamma_o)
+        #Gamma_s = pomdp.gamma * np.eye(pomdp.state_space.n)
+        #Gamma_o = pomdp.gamma * np.eye(pomdp.observation_space.n)
+        gamma_o = pomdp.gamma * np.ones((args.num_gammas, pomdp.observation_space.n))
+        pomdp_for_mem_optim = POMDPG(pomdp.base_mdp, pomdp.phi, gamma_o)
     pomdp = pomdp_for_mem_optim
 
     #jax.debug.print("T:\n{}", pomdp.T)
@@ -270,7 +273,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         after_pi_op_info = {}
         after_pi_op_info['initial_improvement_pi_params'] = memoryless_optimal_pi_params
         after_pi_op_info['initial_improvement_measures'] = log_all_measures(pomdp, memoryless_optimal_pi_params)
-        print("Learnt initial improvement policy:\n{}", nn.softmax(memoryless_optimal_pi_params, axis=-1))
+        #print("Learnt initial improvement policy:\n{}", nn.softmax(memoryless_optimal_pi_params, axis=-1))
         print("Initial memoryless loss: {}", sr_discrep_loss_peter(nn.softmax(memoryless_optimal_pi_params, axis=-1), pomdp)[0])
 
         pi_params_with_memoryless_optimal = pi_paramses.at[-1].set(memoryless_optimal_pi_params)
@@ -359,7 +362,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
             return new_mem_params, pi_params, mem_tx_params, loss
 
         # Make our vmapped memory function
-        update_step = partial(update_mem_step,objective=args.objective, residual='residual' in args.objective)
+        update_step = partial(update_mem_step, objective=args.objective, residual='residual' in args.objective)
 
         def scan_wrapper(inps, i, f: Callable):
             mem_params, pi_params, mem_tx_params = inps
@@ -422,7 +425,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         all_mem_aug_pi_params = mem_aug_pi_paramses
         all_mem_pi_tx_paramses = pi_optim.init(all_mem_aug_pi_params)
 
-        epochs = 2
+        epochs = 1
         for e in range(epochs):
             # Batch policy improvement with PG
             all_improved_pi_tuple, all_improved_pi_info = cross_and_improve_pi(all_mem_paramses, all_mem_aug_pi_params,
@@ -438,7 +441,8 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         #all_improved_pi_params, _, _ = all_improved_pi_tuple
         ld_improved_pi_params = all_improved_pi_params
 
-        jax.debug.print("Final memory: {}", str(jax.nn.softmax(updated_mem_paramses)))
+        jax.debug.print("Final memory:\n{}", str(jax.nn.softmax(updated_mem_paramses)))
+        jax.debug.print("Final policy:\n{}", str(jax.nn.softmax(ld_improved_pi_params)))
 
         #_, augment_gamma_key = jax.random.split(rng)
         #new_pomdp = augment_pomdp_gamma(pomdp, augment_gamma_key,

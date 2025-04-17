@@ -207,7 +207,8 @@ def augment_pomdp_gamma(pomdp: POMDP,
                         augmentation: str = 'uniform',  # uniform | normal
                         scale: float = None,
                         min_val: float = 0.,
-                        max_val: float = 1.):
+                        max_val: float = 1.,
+                        num_gammas: int = 1):
     mdp = deepcopy(pomdp.base_mdp)
     """
     TODO: these augmentations assume observation-conditioned gammas, but 
@@ -224,7 +225,7 @@ def augment_pomdp_gamma(pomdp: POMDP,
 
 
     if augmentation == 'uniform':
-        obs_gammas = jax.random.uniform(rand_key, shape=(n_obs, ), minval=min_val, maxval=max_val)
+        obs_gammas = jax.random.uniform(rand_key, shape=(num_gammas, n_obs), minval=min_val, maxval=max_val)
     elif augmentation == 'normal':
         mean = 0.0
         std = 1.0
@@ -233,7 +234,7 @@ def augment_pomdp_gamma(pomdp: POMDP,
         cdf_high = norm.cdf(max_val, loc=mean, scale=std)
 
         # Sample uniform values between the CDF bounds
-        u = jax.random.uniform(rand_key, shape=(n_obs,), minval=cdf_low, maxval=cdf_high)
+        u = jax.random.uniform(rand_key, shape=(num_gammas, n_obs), minval=cdf_low, maxval=cdf_high)
 
         # Invert the CDF to get samples from the truncated normal
         obs_gammas = norm.ppf(u, loc=mean, scale=std)
@@ -248,23 +249,22 @@ def augment_pomdp_gamma(pomdp: POMDP,
     # return pomdp
 
     # turn into (s, s) matrix
-    Phi = pomdp.phi
-    assert np.all(np.count_nonzero(Phi, axis=1) == 1), f"custom gammas only available for strict aliasing, that is deterministic Phi"
-    phi = np.zeros(n_states, dtype=int)
-    for s in range(n_states):
-        for o in range(n_obs):
-            if Phi[s, o] != 0:
-                phi[s] = o
-    assert obs_gammas.shape == (n_obs,)
-    Gamma_o = np.diag(obs_gammas)
-    state_gammas = np.zeros(n_states, dtype=float)
-    for s in range(n_states):
-        state_gammas[s] = obs_gammas[phi[s]]
-    Gamma_s = np.diag(state_gammas)
+    #Phi = pomdp.phi
+    assert np.all(np.count_nonzero(pomdp.phi, axis=1) == 1), f"custom gammas only available for strict aliasing, that is deterministic Phi"
+    #phi = np.zeros(n_states, dtype=int)
+    #for s in range(n_states):
+    #    for o in range(n_obs):
+    #        if Phi[s, o] != 0:
+    #            phi[s] = o
+    #assert obs_gammas.shape == (n_obs,)
+    #Gamma_o = np.diag(obs_gammas)
+    #state_gammas = np.zeros(n_states, dtype=float)
+    #for s in range(n_states):
+    #    state_gammas[s] = obs_gammas[phi[s]]
+    #Gamma_s = np.diag(state_gammas)
+    #new_pomdp = POMDPG(mdp, pomdp.phi, Gamma_o=Gamma_o, Gamma_s=Gamma_s)
 
-    new_pomdp = POMDPG(mdp, pomdp.phi, Gamma_o=Gamma_o, Gamma_s=Gamma_s)
-    # pomdp.Gamma_o = Gamma_o
-    # pomdp.Gamma_s = Gamma_s
+    new_pomdp = POMDPG(mdp, pomdp.phi, gamma_o=obs_gammas)
 
     return new_pomdp
 

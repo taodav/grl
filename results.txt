@@ -1,0 +1,89 @@
+1 bit memory:
+
+python -m scripts.batch_run_kitchen_sinks_single_obj --spec parity_check --policy_optim_alg policy_grad --value_type q --error_type l2 --alpha 1.0 --objective sr_discrep_peter --gamma_type uniform --gamma_max 0.99 --gamma_min 0.85 --mi_steps 100000 --pi_steps 3000 --optimizer adam --pi_lr 0.01 --mi_lr 0.01 --n_mem_states 2 --n_seeds 1 --platform cpu --seed <insert from list below> --study_name hyperparams --reward_in_obs
+
+N seed 2025 (initial loss 0.00029): 0 performance, memory gets stuck seemingly in local minimum (even at 100k MI)
+    -> it DOES solve if gamma_min = 0.6 (initial loss 0.0006)
+Y seed 20223415 (initial loss 0.0067): 0.81=optimal perf (after 1st round) and 0 mem loss (1e-6 after 1st round, 1e-8 after 2nd)
+N seed 123415 (initial loss 0.00057): gets stuck (perf 0.07) even at 100k MI
+    -> it DOES solve if gamma_min = 0.6 (then initial loss 0.0012)
+Y seed 973415 (initial loss 0.0052): solves at 100k (optimal perf 0.81, mem loss 1e-10) (but only perf 0.13 at 20k MI)
+Y seed 394825 (initial loss 0.0022): solves at 100k (optimal perf 0.81, mem loss 1e-10) (but doesnt solve it yet at 20k)
+
+note: using gvf_obs we get 0 memory loss but < 0.1 performance with gamma_min=0.6 and 100k iterations on these seeds
+
+note: in all the cases where it solves, the final 1-bit memory function is exactly the optimal one, e.g.
+
+(action, obs, m, m)
+val = Array(
+      [[[[[0.    , 1.    ], // m[:, 0, 0(initial)] = 1
+          [0.653 , 0.347 ]],
+
+         [[1.    , 0.    ], // m[:, 1, 0(initial)] = 0
+          [0.5497, 0.4503]],
+
+         [[0.    , 1.    ], // m[:, 2, 0] = 1
+          [1.    , 0.    ]],// m[:, 2, 1] = 0
+
+         [[1.    , 0.    ], // m[:, 3, 0] = 0
+          [0.    , 1.    ]],// m[:, 3, 1] = 1
+
+// memory doesn't matter from now; note the way it is implemented here (see memory_cross_product), the policy while at 
+observation o_t is conditioned on pi(a_t | o_t, m_t), where m_0 = 0 and m_t = m(m_{t-1}, o_{t-1}), that is m_t has only
+seen o1,...,o_{t-1}.
+
+         [[0.4348, 0.5652], 
+          [0.4695, 0.5305]],
+
+         [[0.6004, 0.3996],
+          [0.6883, 0.3117]],
+
+         [[0.2364, 0.7636],
+          [0.4484, 0.5516]],
+
+         [[0.5095, 0.4905],
+          [0.3946, 0.6054]]],
+
+
+        [[[0.    , 1.    ],
+          [0.3992, 0.6008]],
+
+         [[1.    , 0.    ],
+          [0.7046, 0.2954]],
+
+         [[0.    , 1.    ],
+          [1.    , 0.    ]],
+
+         [[1.    , 0.    ],
+          [0.    , 1.    ]],
+
+         [[0.3256, 0.6744],
+          [0.4183, 0.5817]],
+
+         [[0.5694, 0.4306],
+          [0.5316, 0.4684]],
+
+         [[0.2141, 0.7859],
+          [0.7029, 0.2971]],
+
+         [[0.6551, 0.3449],
+          [0.5899, 0.4101]]]]]
+
+pi = 
+Array([[[0.4027, 0.5973], // (o,m) = (0,0)
+        [0.5295, 0.4705], // (o,m) = (0,1)
+        [0.953 , 0.047 ], // (o,m) = (1,0)
+        [0.9529, 0.0471], // (o,m) = (1,1)
+        [0.1635, 0.8365], // (o,m) = (2,0)
+        [0.1636, 0.8364], // (o,m) = (2,1)
+        [0.6649, 0.3351], // (o,m) = (3,0)
+        [0.665 , 0.335 ], // (o,m) = (3,1)
+        [0.0006, 0.9994], // (o,m) = (4,0) <- go up if mem=0
+        [0.9994, 0.0006], // (o,m) = (4,1) <- go down if mem=1
+        [0.9273, 0.0727], // (o,m) = (5,0)
+        [0.9273, 0.0727], // (o,m) = (5,1)
+        [0.0171, 0.9829], // (o,m) = (6,0)
+        [0.0171, 0.9829], // (o,m) = (6,1)
+        [0.8769, 0.1231], // (o,m) = (7,0)
+        [0.8769, 0.1231]  // (o,m) = (7,1)
+]], dtype=float64)

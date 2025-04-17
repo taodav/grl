@@ -3,6 +3,7 @@ from gmpy2 import mpz
 import gymnasium as gym
 from gymnasium import spaces
 import jax.numpy as jnp
+import jax
 from jax import random
 from jax.tree_util import register_pytree_node_class
 import numpy as np
@@ -317,23 +318,35 @@ class POMDP(MDP):
 
 @register_pytree_node_class
 class POMDPG(POMDP):
-    def __init__(self, base_mdp: MDP, phi, Gamma_s: np.ndarray, Gamma_o: np.ndarray):
+    def __init__(self, base_mdp: MDP, phi, gamma_o: np.ndarray):
         super().__init__(base_mdp, phi)
-        self.Gamma_o = Gamma_o
-        self.Gamma_s = Gamma_s
-        #self.Gamma_s = base_mdp.gamma * jnp.eye(self.base_mdp.state_space.n)
-        #self.Gamma_o = base_mdp.gamma * jnp.eye(self.base_mdp.observation_space.n)
+        # either shape (o,) or shape (n_gammas, o)
+        self.gamma_o = gamma_o
+
+    def get_Gamma_o(self):
+        return self.to_diag(self.gamma_o)
+    
+    def get_Gamma_s(self):
+        gamma_s = self.gamma_o @ self.phi.T
+        return self.to_diag(gamma_s)
+    
+    def to_diag(self, diag):
+        k = diag.shape[-1]
+        return diag[..., :, None] * jnp.eye(k)
+    
+    def update_gamma_o(self, gamma_o):
+        self.gamma_o = gamma_o
 
     def tree_flatten(self):
         children = (self.T, self.R, self.p0, self.gamma, self.terminal_mask,
-                    self.phi, self.Gamma_s, self.Gamma_o)
+                    self.phi, self.gamma_o)
         aux_data = None
         return (children, aux_data)
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):
-        mdp = MDP(*children[:-3])
-        return cls(mdp, *children[-3:])
+        mdp = MDP(*children[:-2])
+        return cls(mdp, *children[-2:])
 
     def __repr__(self):
         base_str = super().__repr__()
