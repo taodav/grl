@@ -3,6 +3,7 @@ from gmpy2 import mpz
 import gymnasium as gym
 from gymnasium import spaces
 import jax.numpy as jnp
+import jax
 from jax import random
 from jax.tree_util import register_pytree_node_class
 import numpy as np
@@ -230,15 +231,14 @@ class BlockMDP(MDP):
 
 @register_pytree_node_class
 class POMDP(MDP):
-    def __init__(self, base_mdp: MDP, phi, Gamma_s: np.ndarray=None, Gamma_o: np.ndarray=None):
+    #Gamma_o: np.ndarray
+    #Gamma_s: np.ndarray
+
+    def __init__(self, base_mdp: MDP, phi):
         super().__init__(base_mdp.T, base_mdp.R, base_mdp.p0, base_mdp.gamma,
                          base_mdp.terminal_mask)
         self.base_mdp = copy.deepcopy(base_mdp)
         self.phi = phi # array: base_mdp.state_space.n, n_abstract_states
-        self.Gamma_o = Gamma_o
-        self.Gamma_s = Gamma_s
-        #self.Gamma_s = base_mdp.gamma * jnp.eye(self.base_mdp.state_space.n)
-        #self.Gamma_o = base_mdp.gamma * jnp.eye(self.base_mdp.observation_space.n)
 
     def tree_flatten(self):
         children = (self.T, self.R, self.p0, self.gamma, self.terminal_mask,
@@ -315,6 +315,43 @@ class POMDP(MDP):
         mdp = MDP.generate(n_states, n_actions, sparsity, gamma, Rmin, Rmax)
         phi = random_stochastic_matrix(size=(n_states, n_obs))
         return cls(mdp, phi)
+
+@register_pytree_node_class
+class POMDPG(POMDP):
+    def __init__(self, base_mdp: MDP, phi, gamma_o: np.ndarray):
+        super().__init__(base_mdp, phi)
+        # either shape (o,) or shape (n_gammas, o)
+        self.gamma_o = gamma_o
+
+    def get_Gamma_o(self):
+        return self.to_diag(self.gamma_o)
+    
+    def get_Gamma_s(self):
+        gamma_s = self.gamma_o @ self.phi.T
+        return self.to_diag(gamma_s)
+    
+    def to_diag(self, diag):
+        k = diag.shape[-1]
+        return diag[..., :, None] * jnp.eye(k)
+    
+    def set_gamma_o(self, gamma_o):
+        self.gamma_o = gamma_o
+
+    def tree_flatten(self):
+        children = (self.T, self.R, self.p0, self.gamma, self.terminal_mask,
+                    self.phi, self.gamma_o)
+        aux_data = None
+        return (children, aux_data)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        mdp = MDP(*children[:-2])
+        return cls(mdp, *children[-2:])
+
+    def __repr__(self):
+        base_str = super().__repr__()
+        return base_str + '\n' + repr(self.Gamma_s) + '\n' + repr(self.Gamma_o)
+
 
 class UniformPOMDP(POMDP):
     def __init__(self, base_mdp, phi, pi=None, p0=None):

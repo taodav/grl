@@ -11,7 +11,7 @@ from jax.scipy.stats import norm
 
 from definitions import ROOT_DIR
 from grl.environment.pomdp_file import POMDPFile
-from grl.mdp import MDP, POMDP
+from grl.mdp import MDP, POMDP, POMDPG
 from grl.environment.aliasing import map_to_strict_aliasing
 from grl.utils.math import normalize
 from . import examples_lib
@@ -196,9 +196,9 @@ def load_pomdp(name: str,
     if reward_in_obs:
         spec = add_rewards_in_obs(spec)
     mdp = MDP(spec['T'], spec['R'], spec['p0'], spec['gamma'], rand_key=rand_key)
-    Gamma_o = spec['gamma'] * np.eye(spec['phi'].shape[-1])
-    Gamma_s = spec['gamma'] * np.eye(spec['T'].shape[-1])
-    pomdp = POMDP(mdp, spec['phi'], Gamma_o=Gamma_o, Gamma_s=Gamma_s)
+    # Gamma_o = spec['gamma'] * np.eye(spec['phi'].shape[-1], dtype=float)
+    # Gamma_s = spec['gamma'] * np.eye(spec['T'].shape[-1], dtype=float)
+    pomdp = POMDP(mdp, spec['phi'])
     return pomdp, {'Pi_phi': spec['Pi_phi'], 'Pi_phi_x': spec['Pi_phi_x']}
 
 
@@ -207,8 +207,9 @@ def augment_pomdp_gamma(pomdp: POMDP,
                         augmentation: str = 'uniform',  # uniform | normal
                         scale: float = None,
                         min_val: float = 0.,
-                        max_val: float = 1.):
-    pomdp = deepcopy(pomdp)
+                        max_val: float = 1.,
+                        num_gammas: int = 1):
+    mdp = deepcopy(pomdp.base_mdp)
     """
     TODO: these augmentations assume observation-conditioned gammas, but 
     we implement them as state-conditioned gammas
@@ -224,7 +225,7 @@ def augment_pomdp_gamma(pomdp: POMDP,
 
 
     if augmentation == 'uniform':
-        obs_gammas = jax.random.uniform(rand_key, shape=(n_obs, ), minval=min_val, maxval=max_val)
+        obs_gammas = jax.random.uniform(rand_key, shape=(num_gammas, n_obs), minval=min_val, maxval=max_val)
     elif augmentation == 'normal':
         mean = 0.0
         std = 1.0
@@ -233,7 +234,7 @@ def augment_pomdp_gamma(pomdp: POMDP,
         cdf_high = norm.cdf(max_val, loc=mean, scale=std)
 
         # Sample uniform values between the CDF bounds
-        u = jax.random.uniform(rand_key, shape=(n_obs,), minval=cdf_low, maxval=cdf_high)
+        u = jax.random.uniform(rand_key, shape=(num_gammas, n_obs), minval=cdf_low, maxval=cdf_high)
 
         # Invert the CDF to get samples from the truncated normal
         obs_gammas = norm.ppf(u, loc=mean, scale=std)
@@ -248,24 +249,24 @@ def augment_pomdp_gamma(pomdp: POMDP,
     # return pomdp
 
     # turn into (s, s) matrix
-    Phi = pomdp.phi
-    assert np.all(np.count_nonzero(Phi, axis=1) == 1), f"custom gammas only available for strict aliasing, that is deterministic Phi"
-    phi = np.zeros(n_states, dtype=int)
-    for s in range(n_states):
-        for o in range(n_obs):
-            if Phi[s, o] != 0:
-                phi[s] = o
-    assert obs_gammas.shape == (n_obs,)
-    Gamma_o = np.diag(obs_gammas)
-    state_gammas = np.zeros(n_states, dtype=float)
-    for s in range(n_states):
-        state_gammas[s] = obs_gammas[phi[s]]
-    Gamma_s = np.diag(state_gammas)
+    #Phi = pomdp.phi
+    assert np.all(np.count_nonzero(pomdp.phi, axis=1) == 1), f"custom gammas only available for strict aliasing, that is deterministic Phi"
+    #phi = np.zeros(n_states, dtype=int)
+    #for s in range(n_states):
+    #    for o in range(n_obs):
+    #        if Phi[s, o] != 0:
+    #            phi[s] = o
+    #assert obs_gammas.shape == (n_obs,)
+    #Gamma_o = np.diag(obs_gammas)
+    #state_gammas = np.zeros(n_states, dtype=float)
+    #for s in range(n_states):
+    #    state_gammas[s] = obs_gammas[phi[s]]
+    #Gamma_s = np.diag(state_gammas)
+    #new_pomdp = POMDPG(mdp, pomdp.phi, Gamma_o=Gamma_o, Gamma_s=Gamma_s)
 
-    pomdp.Gamma_o = Gamma_o
-    pomdp.Gamma_s = Gamma_s
+    new_pomdp = POMDPG(mdp, pomdp.phi, gamma_o=obs_gammas)
 
-    return pomdp
+    return new_pomdp
 
 
 def make_subprob_matrix(T):

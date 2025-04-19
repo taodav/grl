@@ -10,6 +10,7 @@ from .state import mem_state_discrep
 from .td import mstd_err, mem_tde_loss
 from .value import value_error
 from .variance import variance_loss, mem_variance_loss
+from .entropy_loss import entropy_loss, mem_entropy_loss, reward_entropy_loss, mem_reward_entropy_loss
 
 
 def mem_dummy_loss(mem_params, pi, pomdp, **kwargs):
