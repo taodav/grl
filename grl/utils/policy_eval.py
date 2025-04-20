@@ -71,7 +71,9 @@ def functional_solve_pomdp(mdp_q_vals: jnp.ndarray, p_pi_of_s_given_o: jnp.ndarr
     return {'v': pomdp_v_vals, 'q': pomdp_q_vals}
 
 @partial(jit, static_argnames='lambda_')
-def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9):
+def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP],
+                 lambda_: float = 0.9,
+                 disc_occupancy: bool = False):
     """Solve for V, Q using LSTD(λ)
 
     For the definition of LSTD(λ) see https://arxiv.org/pdf/1405.3229.pdf
@@ -111,8 +113,12 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP], lambda_: float = 0.9
 
     # Compute the state-action distribution as a diagonal matrix
     I = jnp.eye(sa)
-    # TODO: NOTE this occupancy is discounted occupancy too. We should have a switch for discounted/undiscounted
-    occupancy_as = jnp.linalg.solve((I - gamma * P_as_as.T), as_0)
+    if disc_occupancy:
+        occupancy_as = jnp.linalg.solve((I - gamma * P_as_as.T), as_0)
+    else:
+        as_terminal_mask = pomdp.terminal_mask[None, ...].repeat(a, axis=0)
+        P_as_as_masked = P_as_as * (1 - as_terminal_mask[..., None])
+        occupancy_as = jnp.linalg.solve((I - P_as_as_masked.T), as_0)
     mu = occupancy_as / jnp.sum(occupancy_as)
     D_mu = jnp.diag(mu)
 

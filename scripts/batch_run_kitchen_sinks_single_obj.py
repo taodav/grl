@@ -117,6 +117,8 @@ def get_args():
                         help='(POLICY ITERATION AND TMAZE_EPS_HYPERPARAMS ONLY) What epsilon do we use?')
     parser.add_argument('--reward_in_obs', action='store_true',
                         help='Do we add reward into observation?')
+    parser.add_argument('--discount_occupancy', action='store_true',
+                        help='Do we use discounted occupancy?')
 
     parser.add_argument('--objective', default='ld', choices=['ld', 'tde', 'tde_residual', 'variance', 'disc_count',
                                                               'gvf_obs_rew', 'gvf_obs', 'dummy'])
@@ -151,7 +153,7 @@ def get_mem_kitchen_sink_policy(policies: jnp.ndarray,
 def make_experiment(args, rand_key: jax.random.PRNGKey):
 
     loss_map = {
-        'ld': discrep_loss,
+        'ld': partial(discrep_loss, disc_occupancy=args.discount_occupancy),
         'tde': mstd_err,
         'tde_residual': mstd_err,
         'variance': variance_loss,
@@ -179,14 +181,13 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                                                   min_val=args.gamma_min)
 
 
-
+    _log_all_measures = partial(log_all_measures, disc_occupancy=args.disc_occupancy)
     def experiment(rng: random.PRNGKey):
         info = {}
 
-        batch_log_all_measures = jax.vmap(log_all_measures, in_axes=(None, 0))
+        batch_log_all_measures = jax.vmap(_log_all_measures, in_axes=(None, 0))
 
         rng, mem_rng = random.split(rng)
-
 
         beginning_info = {}
         rng, pi_rng = random.split(rng)
@@ -210,10 +211,11 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         pi_tx_params = pi_optim.init(updateable_pi_params)
 
         print("Running initial policy improvement")
+        _pg_objective_func = partial(pg_objective_func, disc_occupancy=args.disc_occupancy)
         @scan_tqdm(args.pi_steps)
         def update_pg_step(inps, i):
             params, tx_params, pomdp = inps
-            outs, params_grad = value_and_grad(pg_objective_func, has_aux=True)(params, pomdp)
+            outs, params_grad = value_and_grad(_pg_objective_func, has_aux=True)(params, pomdp)
             v_0, (td_v_vals, td_q_vals) = outs
 
             # We add a negative here to params_grad b/c we're trying to
@@ -233,7 +235,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
         after_pi_op_info = {}
         after_pi_op_info['initial_improvement_pi_params'] = memoryless_optimal_pi_params
-        after_pi_op_info['initial_improvement_measures'] = log_all_measures(pomdp, memoryless_optimal_pi_params)
+        after_pi_op_info['initial_improvement_measures'] = _log_all_measures(pomdp, memoryless_optimal_pi_params)
         print("Learnt initial improvement policy:\n{}", nn.softmax(memoryless_optimal_pi_params, axis=-1))
 
         pis_with_memoryless_optimal = pi_paramses.at[-1].set(memoryless_optimal_pi_params)
@@ -278,6 +280,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                 'lambda_0': args.lambda_0,
                 'lambda_1': args.lambda_1,
                 'alpha': args.alpha,
+                'disc_occupancy': args.disc_occupancy
             }
             mem_loss_fn = mem_discrep_loss
             if objective == 'bellman':

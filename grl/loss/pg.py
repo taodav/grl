@@ -10,7 +10,8 @@ from grl.memory import memory_cross_product
 from grl.mdp import MDP, POMDP
 
 
-def pg_objective_func(pi_params: jnp.ndarray, pomdp: POMDP):
+def pg_objective_func(pi_params: jnp.ndarray, pomdp: POMDP,
+                      disc_occupancy: bool = False):
     """
     Policy gradient objective function:
     sum_{s_0} p(s_0) v_pi(s_0)
@@ -19,7 +20,7 @@ def pg_objective_func(pi_params: jnp.ndarray, pomdp: POMDP):
     pi_ground = pomdp.phi @ pi_abs
 
     # Terminals have p(S) = 0.
-    occupancy = functional_get_occupancy(pi_ground, pomdp) * (1 - pomdp.terminal_mask)
+    occupancy = functional_get_occupancy(pi_ground, pomdp, disc_occupancy=disc_occupancy) * (1 - pomdp.terminal_mask)
 
     p_pi_of_s_given_o = get_p_s_given_o(pomdp.phi, occupancy)
     T_obs_obs, R_obs_obs = functional_create_td_model(p_pi_of_s_given_o, pomdp)

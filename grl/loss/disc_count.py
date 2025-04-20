@@ -5,7 +5,7 @@ from grl.memory import memory_cross_product
 from grl.memory.lib import get_memory
 from grl.mdp import POMDP, MDP
 from grl.utils.mdp_solver import (
-    functional_get_occupancy, functional_get_undiscounted_occupancy,
+    functional_get_occupancy,
     get_p_s_given_o, functional_create_td_model
 )
 from grl.utils.policy_eval import functional_solve_mdp, functional_solve_pomdp
@@ -16,7 +16,7 @@ def disc_count_test(pi: jnp.ndarray,
                     dist: str = 'diff'):
     pi_state = pomdp.phi @ pi
     disc_occupancy = functional_get_occupancy(pi_state, pomdp)
-    undisc_occupancy = functional_get_undiscounted_occupancy(pi_state, pomdp)
+    undisc_occupancy = functional_get_occupancy(pi_state, pomdp, disc_occupancy=False)
 
     p_pi_of_s_given_o_undiscounted = get_p_s_given_o(pomdp.phi, undisc_occupancy)
     T_phi_undisc = pomdp.T @ pomdp.phi @ p_pi_of_s_given_o_undiscounted.T
@@ -45,7 +45,7 @@ def disc_count_loss(pi: jnp.ndarray,
                     dist: str = 'kl'):
     pi_state = pomdp.phi @ pi
     disc_occupancy = functional_get_occupancy(pi_state, pomdp)
-    undisc_occupancy = functional_get_undiscounted_occupancy(pi_state, pomdp)
+    undisc_occupancy = functional_get_occupancy(pi_state, pomdp, disc_occupancy=False)
 
     p_pi_of_s_given_o_undiscounted = get_p_s_given_o(pomdp.phi, undisc_occupancy)
     T_phi_undisc = pomdp.T @ pomdp.phi @ p_pi_of_s_given_o_undiscounted.T

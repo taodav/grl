@@ -14,7 +14,7 @@ def weight_and_sum_discrep_loss(diff: jnp.ndarray,
                                 pomdp: POMDP,
                                 value_type: str = 'q',
                                 error_type: str = 'l2',
-                                alpha: float = 1.,
+                                alpha: float = 0.,
                                 flip_count_prob: bool = False):
     c_o = occupancy @ pomdp.phi
     count_o = c_o / c_o.sum()
@@ -60,15 +60,16 @@ def discrep_loss(
         lambda_0: float = 0.,
         lambda_1: float = 1.,
         alpha: float = 1.,
-        flip_count_prob: bool = False): # initialize static args
+        flip_count_prob: bool = False,
+        disc_occupancy: bool = False): # initialize static args
     # if lambda_0 == 0. and lambda_1 == 1.:
     #     _, mc_vals, td_vals, info = analytical_pe(pi, pomdp)
     #     lambda_0_vals = td_vals
     #     lambda_1_vals = mc_vals
     # else:
     # TODO: info here only contains state occupancy, which should lambda agnostic.
-    lambda_0_v_vals, lambda_0_q_vals, _ = lstdq_lambda(pi, pomdp, lambda_=lambda_0)
-    lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi, pomdp, lambda_=lambda_1)
+    lambda_0_v_vals, lambda_0_q_vals, _ = lstdq_lambda(pi, pomdp, lambda_=lambda_0, disc_occupancy=disc_occupancy)
+    lambda_1_v_vals, lambda_1_q_vals, info = lstdq_lambda(pi, pomdp, lambda_=lambda_1, disc_occupancy=disc_occupancy)
     lambda_0_vals = {'v': lambda_0_v_vals, 'q': lambda_0_q_vals}
     lambda_1_vals = {'v': lambda_1_v_vals, 'q': lambda_1_q_vals}
 
@@ -95,7 +96,8 @@ def mem_discrep_loss(
         lambda_0: float = 0.,
         lambda_1: float = 1.,
         alpha: float = 1.,
-        flip_count_prob: bool = False): # initialize with partial
+        flip_count_prob: bool = False,
+        disc_occupancy: bool = False): # initialize with partial
     mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
     loss, _, _ = discrep_loss(pi,
                               mem_aug_pomdp,
@@ -104,7 +106,8 @@ def mem_discrep_loss(
                               lambda_0=lambda_0,
                               lambda_1=lambda_1,
                               alpha=alpha,
-                              flip_count_prob=flip_count_prob)
+                              flip_count_prob=flip_count_prob,
+                              disc_occupancy=disc_occupancy)
     return loss
 
 def obs_space_mem_discrep_loss(

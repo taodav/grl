@@ -80,13 +80,20 @@ def gvf_loss(pi: jnp.ndarray,
     else:
         assert proj is not None
 
+    sq_projected_diff = jnp.square(projected_diff)
+    diff = sq_projected_diff.sum(axis=-1)
+
+    c_o = c_s @ pomdp.phi
+    pr_o = c_o / c_o.sum()
+    loss = jnp.dot(diff, pr_o)
+    # loss = jnp.sum(diff)
+
     # take absolute value
-    abs_projected_diff = jnp.abs(projected_diff)
+    # abs_projected_diff = jnp.abs(projected_diff)
 
     # TODO: How do we reduce projection down to a single dimension? Right now we just do sum.
-    diff = abs_projected_diff.sum(axis=-1)  # O
+    # diff = abs_projected_diff.sum(axis=-1)  # O
 
-    # # now we need to apply W and map back down to Phi space.
     # p_pi_of_s_given_o = get_p_s_given_o(pomdp.phi, occupancy_s)
     #
     # if value_type == 'v':
@@ -99,14 +106,14 @@ def gvf_loss(pi: jnp.ndarray,
     # else:
     #     raise NotImplementedError
 
-    loss = weight_and_sum_discrep_loss(diff,
-                                       c_s,
-                                       pi,
-                                       pomdp,
-                                       value_type=value_type,
-                                       error_type=error_type,
-                                       alpha=alpha,
-                                       flip_count_prob=flip_count_prob)
+    # loss = weight_and_sum_discrep_loss(diff,
+    #                                    c_s,
+    #                                    pi,
+    #                                    pomdp,
+    #                                    value_type=value_type,
+    #                                    error_type=error_type,
+    #                                    alpha=alpha,
+    #                                    flip_count_prob=flip_count_prob)
     return loss, None, None
 
 

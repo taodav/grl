@@ -32,7 +32,8 @@ def augment_and_log_all_measures(mem_params: jnp.ndarray, pomdp: POMDP, mem_aug_
     mem_pomdp = memory_cross_product(mem_params, pomdp)
     return log_all_measures(mem_pomdp, mem_aug_pi_params)
 
-def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray) -> dict:
+def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray,
+                     disc_occupancy: bool = False) -> dict:
     """
     Logs a few things:
     1. values
@@ -43,7 +44,8 @@ def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray) -> dict:
     """
     # Lambda discrepancy
     pi = softmax(pi_params, axis=-1)
-    discrep, mc_vals, td_vals = discrep_loss(pi, pomdp, error_type='l2', value_type='q', alpha=1.)
+    discrep, mc_vals, td_vals = discrep_loss(pi, pomdp, error_type='l2', value_type='q', alpha=1.,
+                                             disc_occupancy=disc_occupancy)
 
     # MSTDE
     # TODO: vector-based gamma for MSTDE
