@@ -20,7 +20,7 @@ def pg_objective_func(pi_params: jnp.ndarray, pomdp: POMDP,
     pi_ground = pomdp.phi @ pi_abs
 
     # Terminals have p(S) = 0.
-    occupancy = functional_get_occupancy(pi_ground, pomdp, disc_occupancy=disc_occupancy) * (1 - pomdp.terminal_mask)
+    occupancy = functional_get_occupancy(pi_ground, pomdp, discounted=disc_occupancy) * (1 - pomdp.terminal_mask)
 
     p_pi_of_s_given_o = get_p_s_given_o(pomdp.phi, occupancy)
     T_obs_obs, R_obs_obs = functional_create_td_model(p_pi_of_s_given_o, pomdp)

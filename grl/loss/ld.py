@@ -50,7 +50,7 @@ def weight_and_sum_discrep_loss(diff: jnp.ndarray,
 
 @partial(jit,
          static_argnames=[
-             'value_type', 'error_type', 'lambda_0', 'lambda_1', 'alpha', 'flip_count_prob'
+             'value_type', 'error_type', 'lambda_0', 'lambda_1', 'alpha', 'flip_count_prob', 'disc_occupancy'
          ])
 def discrep_loss(
         pi: jnp.ndarray,

@@ -1,10 +1,11 @@
+from functools import partial
 from jax import jit
 import jax.numpy as jnp
 import numpy as np
 from typing import Union
 from grl.mdp import MDP, POMDP
 
-@jit
+@partial(jit, static_argnames='discounted')
 def functional_get_occupancy(pi_ground: jnp.ndarray, mdp: Union[MDP, POMDP],
                              discounted: bool = False):
 

@@ -181,7 +181,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                                                   min_val=args.gamma_min)
 
 
-    _log_all_measures = partial(log_all_measures, disc_occupancy=args.disc_occupancy)
+    _log_all_measures = partial(log_all_measures, disc_occupancy=args.discount_occupancy)
     def experiment(rng: random.PRNGKey):
         info = {}
 
@@ -211,7 +211,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         pi_tx_params = pi_optim.init(updateable_pi_params)
 
         print("Running initial policy improvement")
-        _pg_objective_func = partial(pg_objective_func, disc_occupancy=args.disc_occupancy)
+        _pg_objective_func = partial(pg_objective_func, disc_occupancy=args.discount_occupancy)
         @scan_tqdm(args.pi_steps)
         def update_pg_step(inps, i):
             params, tx_params, pomdp = inps
@@ -280,7 +280,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                 'lambda_0': args.lambda_0,
                 'lambda_1': args.lambda_1,
                 'alpha': args.alpha,
-                'disc_occupancy': args.disc_occupancy
+                'disc_occupancy': args.discount_occupancy
             }
             mem_loss_fn = mem_discrep_loss
             if objective == 'bellman':

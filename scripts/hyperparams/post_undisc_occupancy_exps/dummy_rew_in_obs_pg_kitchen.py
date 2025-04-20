@@ -10,8 +10,6 @@ hparams = {
         'spec': [
             'tiger-alt-start', 'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
             'cheese.95', 'network', 'shuttle.95', 'paint.95', 'parity_check'
-            # 'hallway'
-            # 'bridge-repair',
         ],
         'policy_optim_alg': 'policy_grad',
         'value_type': 'q',
@@ -19,8 +17,8 @@ hparams = {
         'alpha': 1.,
         'objective': 'dummy',
         # 'objective': ['ld', 'obs_space'],
-        'mi_steps': 20000,
-        'pi_steps': 10000,
+        'mi_steps': 1,
+        'pi_steps': 50000,
         'reward_in_obs': True,
         'optimizer': 'adam',
         'pi_lr': 0.01,

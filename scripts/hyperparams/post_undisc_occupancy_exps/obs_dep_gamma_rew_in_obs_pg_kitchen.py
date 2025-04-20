@@ -8,21 +8,19 @@ hparams = {
     'entry': '-m scripts.batch_run_kitchen_sinks_single_obj',
     'args': [{
         'spec': [
-            'tiger-alt-start', 'paint.95', 'parity_check'
-            # 'tiger-alt-start', 'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
-            # 'cheese.95', 'network', 'shuttle.95', 'paint.95', 'parity_check'
-
-            # 'hallway'
-            # 'bridge-repair',
+            'tiger-alt-start', 'network', 'shuttle.95', 'paint.95',
+            'tmaze_5_two_thirds_up', 'example_7', '4x3.95',
+            'cheese.95', 'parity_check'
         ],
         'policy_optim_alg': 'policy_grad',
         'value_type': 'q',
         'error_type': 'l2',
         'alpha': 1.,
-        'objective': 'gvf_obs',
+        'objective': ['gvf_obs', 'ld'],
         # 'objective': ['ld', 'obs_space'],
-        'mi_steps': 20000,
-        'pi_steps': 10000,
+        'gamma_type': ['uniform', 'normal'],
+        'mi_steps': 50000,
+        'pi_steps': 50000,
         'reward_in_obs': True,
         'optimizer': 'adam',
         'pi_lr': 0.01,

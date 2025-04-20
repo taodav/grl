@@ -45,7 +45,8 @@ def gvf_loss(pi: jnp.ndarray,
              projection: str = 'obs_rew',  # ['obs_rew', 'obs']
              proj: jnp.ndarray = None,
              alpha: float = 1.,
-             flip_count_prob: bool = False):
+             flip_count_prob: bool = False,
+             **kwargs):
     pi_sa = pomdp.phi @ pi
     a, s, _ = pomdp.T.shape
 
@@ -128,7 +129,8 @@ def mem_gvf_loss(
         projection: str = 'obs_rew',  # ['obs_rew', 'obs']
         proj: jnp.ndarray = None,
         alpha: float = 1.,
-        flip_count_prob: bool = False):  # initialize with partial
+        flip_count_prob: bool = False,
+        **kwargs):  # initialize with partial
     mem_aug_pomdp = memory_cross_product(mem_params, pomdp)
     loss, _, _ = gvf_loss(pi,
                           mem_aug_pomdp,

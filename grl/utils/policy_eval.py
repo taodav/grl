@@ -70,7 +70,7 @@ def functional_solve_pomdp(mdp_q_vals: jnp.ndarray, p_pi_of_s_given_o: jnp.ndarr
 
     return {'v': pomdp_v_vals, 'q': pomdp_q_vals}
 
-@partial(jit, static_argnames='lambda_')
+@partial(jit, static_argnames=['lambda_', 'disc_occupancy'])
 def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP],
                  lambda_: float = 0.9,
                  disc_occupancy: bool = False):
@@ -116,7 +116,7 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP],
     if disc_occupancy:
         occupancy_as = jnp.linalg.solve((I - gamma * P_as_as.T), as_0)
     else:
-        as_terminal_mask = pomdp.terminal_mask[None, ...].repeat(a, axis=0)
+        as_terminal_mask = pomdp.terminal_mask.repeat(a, axis=0)
         P_as_as_masked = P_as_as * (1 - as_terminal_mask[..., None])
         occupancy_as = jnp.linalg.solve((I - P_as_as_masked.T), as_0)
     mu = occupancy_as / jnp.sum(occupancy_as)
