@@ -48,11 +48,10 @@ def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray,
                                              disc_occupancy=disc_occupancy)
 
     # MSTDE
-    # TODO: vector-based gamma for MSTDE
-    mstde_loss, mstde_res_loss = None, None
-    if isinstance(pomdp.gamma, float) or len(pomdp.gamma.shape) == 0:
-        mstde_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=False)
-        mstde_res_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=True)
+    # mstde_loss, mstde_res_loss = None, None
+    # if isinstance(pomdp.gamma, float) or len(pomdp.gamma.shape) == 0:
+    #     mstde_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=False)
+    #     mstde_res_loss, vals, _ = mstd_err(pi, pomdp, error_type='l2', residual=True)
 
     # GVF
     gvf_obs_rew_loss, _, _ = gvf_loss(pi, pomdp, projection='obs_rew')
@@ -72,8 +71,8 @@ def log_all_measures(pomdp: POMDP, pi_params: jnp.ndarray,
 
     return {'errors':
                 {'ld': discrep,
-                 'mstde': mstde_loss,
-                 'mstde_residual': mstde_res_loss,
+                 # 'mstde': mstde_loss,
+                 # 'mstde_residual': mstde_res_loss,
                  'value': value_err,
                  'gvf_obs_rew': gvf_obs_rew_loss,
                  'gvf_obs': gvf_obs_loss,

@@ -118,7 +118,8 @@ def lstdq_lambda(pi: jnp.ndarray, pomdp: Union[MDP, POMDP],
     else:
         as_terminal_mask = pomdp.terminal_mask.repeat(a, axis=0)
         P_as_as_masked = P_as_as * (1 - as_terminal_mask[..., None])
-        occupancy_as = jnp.linalg.solve((I - P_as_as_masked.T), as_0)
+        D_eps_as = 1e-10 * jnp.eye(P_as_as_masked.shape[0])
+        occupancy_as = jnp.linalg.solve((I - P_as_as_masked.T) + D_eps_as, as_0)
     mu = occupancy_as / jnp.sum(occupancy_as)
     D_mu = jnp.diag(mu)
 

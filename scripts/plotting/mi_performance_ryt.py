@@ -36,18 +36,16 @@ belief_perf = {
 #     Path(ROOT_DIR, 'results', 'mem_tde_kitchen_sinks_pg'),
 #     Path(ROOT_DIR, 'results', 'final_discrep_kitchen_sinks_pg'),
 # ]
-# title = 'SF (reward bucket) w/ fixed gamma'
+title = 'SF (reward bucket) w/ fixed gamma'
 # title = 'SF (reward bucket) w/ obs-dependent gamma (U[0.8, 0.99])'
-title = 'SF (reward bucket) w/ obs-dependent gamma (U[0, 1])'
+# title = 'SF (reward bucket) w/ obs-dependent gamma (U[0, 1])'
 experiment_dirs = [
     Path(ROOT_DIR, 'results', 'dummy_rew_in_obs_pg_kitchen'),
 
-    # Path(ROOT_DIR, 'results', 'ld_pg_kitchen'),
-    # Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'ld_rew_in_obs_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'gvf_rew_in_obs_pg_kitchen'),
 
-    # Path(ROOT_DIR, 'results', 'obs_dep_gamma_pg_kitchen'),
-    # Path(ROOT_DIR, 'results', 'obs_dep_uniform_gamma_0.8_0.99_pg_kitchen'),
-    Path(ROOT_DIR, 'results', 'obs_dep_gamma_rew_in_obs_pg_kitchen'),
+    # Path(ROOT_DIR, 'results', 'obs_dep_gamma_rew_in_obs_pg_kitchen'),
     # Path(ROOT_DIR, 'results', 'obs_dep_uniform_gamma_0.8_0.99_rew_in_obs_pg_kitchen'),
 ]
 
@@ -102,7 +100,7 @@ residual = False
 alpha = 1.
 filtered_df = all_res_df[
 # (all_res_df['residual'] == residual) &
-((all_res_df['gamma_type'] == 'fixed') | (all_res_df['gamma_type'] == 'normal')) &
+((all_res_df['gamma_type'] == 'fixed') | (all_res_df['gamma_type'] == 'uniform')) &
 (all_res_df['alpha'] == alpha)
 ].reset_index()
 

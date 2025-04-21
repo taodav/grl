@@ -126,7 +126,8 @@ def sr_lambda(
     Pi = jnp.eye(len(pi))[..., None] * pi[None, ...]
     Pi_s = jnp.eye(len(pi_s))[..., None] * pi_s[None, ...]
 
-    c_s = jnp.linalg.solve(I_S - T_pi.T, p0)
+    D_eps_s = 1e-10 * jnp.eye(T_pi.shape[0])
+    c_s = jnp.linalg.solve((I_S - T_pi.T) + D_eps_s, p0)
 
     Pr_s = c_s / jnp.sum(c_s)
 

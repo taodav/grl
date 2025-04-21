@@ -27,13 +27,14 @@ def functional_get_occupancy(pi_ground: jnp.ndarray, mdp: Union[MDP, POMDP],
         terminal_T_pi_mask = jnp.diag(mdp.terminal_mask)
         T_pi = T_pi * (1 - terminal_T_pi_mask)
 
+        D_eps_s = 1e-10 * jnp.eye(T_pi.shape[0])
         # A*C_pi(s) = b
         # A = (I - (T^π)^T)
         # b = P_0
         A = jnp.eye(mdp.state_space.n) - T_pi.transpose()
         b = mdp.p0
 
-    return jnp.linalg.solve(A, b)
+    return jnp.linalg.solve(A + D_eps_s, b)
 
 
 def pomdp_get_occupancy(pi: jnp.ndarray, pomdp: POMDP):

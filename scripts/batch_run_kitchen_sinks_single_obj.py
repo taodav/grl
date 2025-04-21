@@ -391,6 +391,8 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 if __name__ == "__main__":
     start_time = time()
     # jax.disable_jit(True)
+    # jax.config.update("jax_debug_nans", True)
+    jax.config.update("jax_enable_x64", True)
 
     args = get_args()
 
