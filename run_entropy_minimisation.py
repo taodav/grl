@@ -167,8 +167,8 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         print("Optimising memory...")
         print("Initial loss: {}", mem_loss_fn(mem_params, pomdp))
 
-        #output_mem_tuple, info = python_scan(
-        output_mem_tuple, info = jax.lax.scan(
+        output_mem_tuple, info = python_scan(
+        #output_mem_tuple, info = jax.lax.scan(
             update_memory_step,
             (mem_params, mem_tx_params),
             jnp.arange(args.mi_steps),
@@ -199,8 +199,9 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
             updates, tx_params = pi_optim.update(params_grad, tx_params, params)
             params = optax.apply_updates(params, updates)
+            perf = get_policy_performance(params, mem_pomdp)
             outs = (params, tx_params)
-            return outs, {'v0': v_0, 'v': td_v_vals, 'q': td_q_vals}
+            return outs, {'loss': perf, 'v0': v_0, 'v': td_v_vals, 'q': td_q_vals}
         
         print("Optimising policy...")
         print("Initial performance: {}", get_policy_performance(pi_params, mem_pomdp))
