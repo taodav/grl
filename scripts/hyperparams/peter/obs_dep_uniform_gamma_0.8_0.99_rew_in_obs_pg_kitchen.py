@@ -16,7 +16,7 @@ hparams = {
         'value_type': 'q',
         'error_type': 'l2',
         'alpha': 1.,
-        'objective': ['gvf_obs', 'ld'],
+        'objective': ['sr_discrep_peter', 'ld'],
         # 'objective': ['ld', 'obs_space'],
         'gamma_type': 'uniform',
         'gamma_max': 0.99,
