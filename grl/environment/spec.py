@@ -264,7 +264,7 @@ def augment_pomdp_gamma(pomdp: POMDP,
     #Gamma_s = np.diag(state_gammas)
     #new_pomdp = POMDPG(mdp, pomdp.phi, Gamma_o=Gamma_o, Gamma_s=Gamma_s)
 
-    new_pomdp = POMDPG(mdp, pomdp.phi, gamma_o=obs_gammas)
+    new_pomdp = POMDPG(pomdp.base_mdp, pomdp.phi, gamma_o=obs_gammas)
 
     return new_pomdp
 
