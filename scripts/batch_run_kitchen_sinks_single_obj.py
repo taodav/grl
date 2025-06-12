@@ -220,24 +220,27 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                                                   min_val=args.gamma_min,
                                                   num_gammas=args.num_gammas)
     else:
-        #Gamma_s = pomdp.gamma * np.eye(pomdp.state_space.n)
-        #Gamma_o = pomdp.gamma * np.eye(pomdp.observation_space.n)
         gamma_o = pomdp.gamma * np.ones((args.num_gammas, pomdp.observation_space.n))
         pomdp_for_mem_optim = POMDPG(pomdp.base_mdp, pomdp.phi, gamma_o)
     pomdp = pomdp_for_mem_optim
 
-    #jax.debug.print("T:\n{}", pomdp.T)
-    #jax.debug.print("phi:\n{}", pomdp.phi)
-    #jax.debug.print("R:\n{}", pomdp.R)
-    
-    # zero out terminal rows in T
+    ## zero out terminal rows in T
     pomdp.T = make_subprob_matrix(pomdp.T)
-
 
     def experiment(rng: random.PRNGKey):
         info = {}
 
         batch_log_all_measures = jax.vmap(log_all_measures, in_axes=(None, 0))
+
+        ################################# do it again here so every seed has different gammas
+        if args.gamma_type != 'fixed':
+            rng, augment_gamma_rng = jax.random.split(rng)
+            gamma_o = jax.random.uniform(augment_gamma_rng, shape=(args.num_gammas, pomdp.observation_space.n), minval=args.gamma_min, maxval=args.gamma_max)
+            pomdp.set_gamma_o(gamma_o)
+        else:
+            gamma_o = pomdp.gamma * np.ones((args.num_gammas, pomdp.observation_space.n))
+            pomdp.set_gamma_o(gamma_o)
+        #################################
 
         rng, mem_rng = random.split(rng)
 
@@ -553,23 +556,23 @@ def main():
     args = get_args()
 
     np.set_printoptions(precision=4, suppress=True)
-    print(f"Platform: {args.platform}")
-    config.update('jax_platform_name', args.platform)
-    config.update("jax_enable_x64", True)
-    print(f"Available devices: {jax.devices()}")
-    print(f"Default backend: {jax.default_backend()}")
-    print(f"Local devices: {jax.local_devices()}")
-
     # Check if GPU is being used
     if jax.default_backend() == 'gpu':
         print("✅ JAX is using GPU")
     else:
-        print("❌ JAX is using:", jax.default_backend())
-    x = jnp.array([1, 2, 3, 4, 5])
-    print(f"Array device: {x.device}")
-    print(f"Device type: {x.device.device_kind}")
-    print(f"Device ID: {x.device.id}")
-    print(f"Platform: {x.device.platform}") 
+        print(f"❌ JAX is using: {jax.default_backend()}")
+
+    #print(f"Platform: {args.platform}")
+    #config.update('jax_platform_name', args.platform)
+    #config.update("jax_enable_x64", True)
+    #print(f"Available devices: {jax.devices()}")
+    #print(f"Default backend: {jax.default_backend()}")
+    #print(f"Local devices: {jax.local_devices()}")
+    #x = jnp.array([1, 2, 3, 4, 5])
+    #print(f"Array device: {x.device}")
+    #print(f"Device type: {x.device.device_kind}")
+    #print(f"Device ID: {x.device.id}")
+    #print(f"Platform: {x.device.platform}") 
 
     rng = random.PRNGKey(seed=args.seed)
     rngs = random.split(rng, args.n_seeds + 1)
@@ -595,15 +598,18 @@ def main():
     info['run_stats'] = run_stats
 
     def perf_from_stats(stats: dict) -> float:
-        return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1).mean().item()
+        return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1) #.mean().item()
 
     print("Finished Memory Iteration.")
-    print(f"Average performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values']):.4f}")
+    np.set_printoptions(precision=4, suppress=True)
+    print(f"Performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values'])}")
     print(
-        f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values']):.4f}"
+        f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values'])}"
     )
-    print(f"Final performance after MI: {perf_from_stats(outs['final']['improved_mem']['measures']['values']):.4f}")
+    final_performance = perf_from_stats(outs['final']['improved_mem']['measures']['values'])
+    print(f"Final performance after MI: {final_performance}")
     print(f"Saving results to {_results_path}")
+    info['final_performance'] = final_performance
     numpyify_and_save(_results_path, info)
 
     memory_profiling()
