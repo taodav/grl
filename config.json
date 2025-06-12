@@ -1,0 +1,23 @@
+{
+  "spec": "parity_check",
+  "policy_optim_alg": "policy_grad",
+  "value_type": "q",
+  "error_type": "l2",
+  "alpha": 1.0,
+  "objective": "sr_discrep_peter",
+  "gamma_type": "uniform",
+  "gamma_max": 0.99,
+  "gamma_min": 0.6,
+  "mi_steps": 50000,
+  "pi_steps": 3000,
+  "optimizer": "adam",
+  "pi_lr": 0.01,
+  "mi_lr": 0.01,
+  "n_mem_states": 2,
+  "n_seeds": 1,
+  "platform": "cpu",
+  "seed": 42,
+  "study_name": "hyperparams",
+  "reward_in_obs": true,
+  "num_gammas": 1
+}

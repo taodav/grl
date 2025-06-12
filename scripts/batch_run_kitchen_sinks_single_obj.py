@@ -6,6 +6,7 @@ as well as the TD optimal policy, on a list of different measures.
 
 
 import argparse
+import json
 from functools import partial
 from time import time
 from typing import Callable
@@ -142,7 +143,16 @@ def get_args():
     parser.add_argument('--n_seeds', default=1, type=int,
                         help='How many seeds do we run?')
 
+    parser.add_argument('--config', type=str, help='Path to JSON config file')
+
     args = parser.parse_args()
+
+    # If a JSON config file is provided, overwrite the arguments
+    if args.config:
+        with open(args.config, 'r') as f:
+            config_args = json.load(f)
+        for key, value in config_args.items():
+            setattr(args, key, value)
     return args
 
 def get_optimal_one_bit_memory_parity_check():
@@ -540,7 +550,7 @@ if __name__ == "__main__":
 
     time_finish = time()
 
-    results_path = results_path(args, entry_point=args.objective)
+    _results_path = results_path(args, entry_point=args.objective)
     info = {'logs': outs, 'args': args.__dict__}
 
     end_time = time()
@@ -556,5 +566,5 @@ if __name__ == "__main__":
         f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values']):.4f}"
     )
     print(f"Final performance after MI: {perf_from_stats(outs['final']['improved_mem']['measures']['values']):.4f}")
-    print(f"Saving results to {results_path}")
-    numpyify_and_save(results_path, info)
+    print(f"Saving results to {_results_path}")
+    numpyify_and_save(_results_path, info)
