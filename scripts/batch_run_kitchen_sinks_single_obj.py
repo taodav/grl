@@ -524,7 +524,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
     return experiment
 
 
-if __name__ == "__main__":
+def main():
     start_time = time()
     jax.disable_jit(True)
 
@@ -568,3 +568,6 @@ if __name__ == "__main__":
     print(f"Final performance after MI: {perf_from_stats(outs['final']['improved_mem']['measures']['values']):.4f}")
     print(f"Saving results to {_results_path}")
     numpyify_and_save(_results_path, info)
+
+if __name__ == "__main__":
+    main()
