@@ -159,11 +159,13 @@ def is_prob_matrix(P, shape = None):
         return False
     return np.all(P >= 0) and np.allclose(P.sum(axis=-1), 1.0)
 
+
 def is_subprob_matrix(P, shape = None):
     epsilon = 1e-7
     if shape is not None and P.shape != shape:
         return False
     return np.all(P >= -epsilon) and np.all(P.sum(axis=-1) <= 1.0 + epsilon)
+
 
 def make_subprob_matrix(T):
     """Find terminal states, which are those where every action just leads back to 
@@ -196,6 +198,7 @@ def make_subprob_matrix(T):
             Tnew[s, :, :] = 0
     return Tnew
 
+
 def calculate_sr_discrepancy_from_env(
         env: POMDP,
         pi: np.ndarray,
@@ -222,6 +225,7 @@ def calculate_sr_discrepancy_from_env(
         use_random_custom_gammas=use_random_custom_gammas,
         custom_gammas=custom_gammas
     )
+
 
 def setup_order_aliasing_environment():
     n_states = 11  # two corridors, one 0 - 1 - 2 - 0 - 1 and one 0 - 2 - 1 - 0 - 2, and then a joint terminal state
@@ -269,6 +273,7 @@ def setup_order_aliasing_environment():
     pi = np.ones((n_obs, n_actions))
 
     return (n_actions, n_states, n_obs, Phi, T, p0, gamma, pi)
+
 
 def make_strictly_aliased(
         n_actions: int,
@@ -341,6 +346,7 @@ def make_strictly_aliased_naive(
 
 #%%
 
+"""
 env, info = load_pomdp('tiger-alt-start')
 #env, _ = setup_parity_check()
 n_actions = env.action_space.n
@@ -365,6 +371,7 @@ print(f"O:\n{Phi_new}")
 #assert np.allclose(Phi, Phi_new)
 #assert np.allclose(T, T_new)
 #assert np.allclose(p0, p0_new)
+"""
 
 #%%
 def calculate_sr_discrepancy_raw(
@@ -432,7 +439,7 @@ def calculate_sr_discrepancy_raw(
     Phi_A = kron(Phi, I_A)
     
     pi_s = dot(Phi, pi)
-    assert is_prob_matrix(pi_s, (n_states, n_actions))
+    assert is_subprob_matrix(pi_s, (n_states, n_actions))
     T_pi = np.einsum("ik,ikj->ij", pi_s, T)
     assert is_subprob_matrix(T_pi, (n_states, n_states))
     Pi = np.eye(len(pi))[..., None] * pi[None, ...]
