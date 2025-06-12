@@ -15,7 +15,7 @@
   "mi_lr": 0.01,
   "n_mem_states": 2,
   "n_seeds": 1,
-  "platform": "cpu",
+  "platform": "gpu",
   "seed": 42,
   "study_name": "hyperparams",
   "reward_in_obs": true,

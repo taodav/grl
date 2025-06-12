@@ -523,6 +523,28 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
     return experiment
 
+def memory_profiling():
+    print("--- JAX Memory Profiling ---")
+    try:
+        # Get all GPU devices that JAX can see
+        gpu_devices = jax.devices("gpu")
+
+        if not gpu_devices:
+            print("No GPU devices found by JAX.")
+        else:
+            for device in gpu_devices:
+                # Get the memory statistics for the device
+                stats = device.memory_stats()
+
+                # The 'peak_bytes_in_use' is the high-water mark
+                peak_bytes = stats["peak_bytes_in_use"]
+                peak_gib = peak_bytes / (1024**3)  # Convert bytes to GiB
+
+                print(f"Device: {device.device_kind} (id={device.id})")
+                print(f"  Peak memory usage: {peak_gib:.4f} GiB")
+
+    except Exception as e:
+        print(f"Could not get JAX memory stats: {e}")
 
 def main():
     start_time = time()
@@ -531,8 +553,23 @@ def main():
     args = get_args()
 
     np.set_printoptions(precision=4, suppress=True)
+    print(f"Platform: {args.platform}")
     config.update('jax_platform_name', args.platform)
     config.update("jax_enable_x64", True)
+    print(f"Available devices: {jax.devices()}")
+    print(f"Default backend: {jax.default_backend()}")
+    print(f"Local devices: {jax.local_devices()}")
+
+    # Check if GPU is being used
+    if jax.default_backend() == 'gpu':
+        print("✅ JAX is using GPU")
+    else:
+        print("❌ JAX is using:", jax.default_backend())
+    x = jnp.array([1, 2, 3, 4, 5])
+    print(f"Array device: {x.device}")
+    print(f"Device type: {x.device.device_kind}")
+    print(f"Device ID: {x.device.id}")
+    print(f"Platform: {x.device.platform}") 
 
     rng = random.PRNGKey(seed=args.seed)
     rngs = random.split(rng, args.n_seeds + 1)
@@ -568,6 +605,8 @@ def main():
     print(f"Final performance after MI: {perf_from_stats(outs['final']['improved_mem']['measures']['values']):.4f}")
     print(f"Saving results to {_results_path}")
     numpyify_and_save(_results_path, info)
+
+    memory_profiling()
 
 if __name__ == "__main__":
     main()
