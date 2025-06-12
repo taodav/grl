@@ -55,7 +55,7 @@ def entropy_loss(
     # it does NOT have the same likelihood over different aliased states
     # >>> WRONG >>> Pr_s = jnp.ones(n_s) / n_s
  
-    W = Pr_s[None, ...] *  pomdp.phi.T
+    W = Pr_s[None, ...] * pomdp.phi.T
     W = W / jnp.maximum(jnp.sum(W, axis=1)[..., None], 1e-8)
 
     I_A = jnp.eye(n_a)
@@ -71,6 +71,8 @@ def entropy_loss(
 
     return loss
 
+from jax import random 
+
 def reward_entropy_loss(
         pomdp: POMDP
     ):
@@ -83,7 +85,10 @@ def reward_entropy_loss(
     T = pomdp.T 
 
     # W(s | omega), shape (omega, s)
-    pi = jnp.ones((n_o, n_a), dtype=float) / n_a
+    rng = random.PRNGKey(seed=7 * n_s * n_a + 2 * n_o + 3)   # just something
+    pi = jnp.exp(random.normal(rng, shape=(n_o, n_a)))
+    pi = pi / jnp.sum(pi, axis=1)[:, None]
+    #pi = jnp.ones((n_o, n_a), dtype=float) / n_a
     pi_s = pomdp.phi @ pi  # (s, a)
     T_pi = jnp.einsum("ik,kij->ij", pi_s, T)
     I_S = jnp.eye(n_s)
@@ -96,6 +101,7 @@ def reward_entropy_loss(
 
     W = Pr_s[None, ...] *  pomdp.phi.T
     W = W / jnp.maximum(jnp.sum(W, axis=1)[..., None], 1e-8)
+    #print(f"W:\n{W[6:8, :]}")
     #print_nonzero_entries(pomdp.phi)
 
     I_A = jnp.eye(n_a)

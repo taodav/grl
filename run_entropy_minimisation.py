@@ -105,6 +105,19 @@ def get_optimal_one_bit_memory_parity_check():
 
     return mem
 
+def get_optimal_one_bit_memory_tmaze():
+    mem = jnp.zeros((4, 7, 2, 2))  # (action, obs, mem, mem)
+
+    # remember first obs
+    mem = mem.at[:, 0, :, 0].set(1.0)
+    mem = mem.at[:, 1, :, 1].set(1.0)
+
+    # otherwise just leave the memory as is
+    mem = mem.at[:, 2:, 0, 0].set(1.0)
+    mem = mem.at[:, 2:, 1, 1].set(1.0)
+
+    return mem
+
 def get_policy_performance(
         pi_params: jnp.array,
         pomdp: POMDP
@@ -124,6 +137,19 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                                 discount=args.tmaze_discount,
                                 junction_up_pi=args.tmaze_junction_up_pi,
                                 reward_in_obs=args.reward_in_obs)
+    
+    #print(f"n_o:\n{pomdp.observation_space.n}")
+    #print(f"n_s:\n{pomdp.state_space.n}")
+    #print(f"n_a:\n{pomdp.action_space.n}")
+    #print(f"T_up:\n{pomdp.T[0,...]}")
+    #print(f"T_down:\n{pomdp.T[1,...]}")
+    #print(f"T_right:\n{pomdp.T[2,...]}")
+    #print(f"T_left:\n{pomdp.T[3,...]}")
+    #print(f"Phi:\n{pomdp.phi}")
+    #print(f"R:\n{pomdp.R}")
+    #print(f"p0:\n{pomdp.p0}")
+    #print(f"gamma: {pomdp.gamma}")
+    #return
     
     loss_fn_dict = {
         0: mem_entropy_loss,
@@ -152,12 +178,14 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         mem_tx_params = mi_optim.init(mem_params)
 
         #mem_params = reverse_softmax(get_optimal_one_bit_memory_parity_check())
+        #mem_params = reverse_softmax(get_optimal_one_bit_memory_tmaze())
 
         @scan_tqdm(args.mi_steps)
         def update_memory_step(inps, i):
             mem_params, mem_tx_params = inps
 
             loss, params_grad = value_and_grad(mem_loss_fn, argnums=0)(mem_params, pomdp)
+            #jax.debug.print("grad abs: {}", jnp.sum(jnp.abs(params_grad)))
 
             updates, mem_tx_params, = mi_optim.update(params_grad, mem_tx_params, mem_params)
             new_mem_params = optax.apply_updates(mem_params, updates)
@@ -166,6 +194,8 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         
         print("Optimising memory...")
         print("Initial loss: {}", mem_loss_fn(mem_params, pomdp))
+        #print("Memory function:\n{}", jax.nn.softmax(mem_params))
+        return
 
         output_mem_tuple, info = python_scan(
         #output_mem_tuple, info = jax.lax.scan(
@@ -216,6 +246,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
         pi_params, pi_tx_params = output_pi_tuple
 
         print("Final performance: {}", get_policy_performance(pi_params, mem_pomdp))
+        #print("Policy: {}", jax.nn.softmax(pi_params))
 
     return experiment
 

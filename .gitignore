@@ -23,3 +23,5 @@ logs/
 generated/
 scripts/runs/
 todo.txt
+jax101.ipynb
+scripts/deep_rl_pomdps/
