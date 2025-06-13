@@ -53,6 +53,22 @@ from grl.loss import (
 from grl.utils.optimizer import get_optimizer
 from grl.utils.policy import get_unif_policies
 
+import wandb
+import os, sys
+
+# Check if the WANDB_SWEEP_ID environment variable is set
+is_wandb_run = 'WANDB_SWEEP_ID' in os.environ
+
+print(f"--- SCRIPT RUNNING WITH PYTHON: {sys.executable} ---")
+
+if is_wandb_run:
+    # This block will execute ONLY when run by a W&B agent
+    print("This is a W&B sweep run.")
+    # Add logic specific to W&B runs here
+else:
+    # This block will execute ONLY when run directly from the console
+    print("This is a local console run.")
+    # Add logic specific to local/console runs here
 
 def get_args():
     # Args
@@ -145,14 +161,18 @@ def get_args():
 
     parser.add_argument('--config', type=str, help='Path to JSON config file')
 
+    # W&B agent passes arguments via command line.
+    # The get_args function naturally handles this.
     args = parser.parse_args()
 
-    # If a JSON config file is provided, overwrite the arguments
+    # If a JSON config file is provided, overwrite the arguments.
+    # This remains for single runs, but W&B sweeps will use command-line args.
     if args.config:
         with open(args.config, 'r') as f:
             config_args = json.load(f)
         for key, value in config_args.items():
             setattr(args, key, value)
+            
     return args
 
 def get_optimal_one_bit_memory_parity_check():
@@ -431,6 +451,11 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
             #updated_mem_paramses = reverse_softmax(get_optimal_one_bit_memory_parity_check())
             info['after_mem_op'] = updated_mem_info
             jax.debug.print("Memory loss: {}", losses[-1])
+            # cannot log because inside jitted function
+            #if is_wandb_run:
+            #    wandb.log({
+            #        "memory_loss": losses[-1],
+            #    })
             return updated_mem_paramses
 
 
@@ -551,10 +576,18 @@ def memory_profiling():
 
 def main():
     start_time = time()
-    jax.disable_jit(True)
+    #jax.disable_jit(True)
 
+    if is_wandb_run:
+        # Initialize W&B run
+        # project should be your project name
+        # entity should be your W&B username or team name
+        wandb.init(project="hyperparameter-search-example")
+
+    # W&B will inject its config into your script's arguments.
+    # get_args() will now see the hyperparameters from the W&B sweep.
     args = get_args()
-
+    
     np.set_printoptions(precision=4, suppress=True)
     # Check if GPU is being used
     if jax.default_backend() == 'gpu':
@@ -581,8 +614,8 @@ def main():
     rng, make_rng = jax.random.split(rng)
 
     t0 = time()
-    #experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
-    experiment_vjit_fn = jax.vmap(make_experiment(args, make_rng))
+    experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
+    #experiment_vjit_fn = jax.vmap(make_experiment(args, make_rng))
     # Run the experiment!
     # results will be batched over (n_seeds, random_policies + 1).
     # The + 1 is for the TD optimal policy.
@@ -594,25 +627,48 @@ def main():
     info = {'logs': outs, 'args': args.__dict__}
 
     end_time = time()
-    run_stats = {'start_time': start_time, 'end_time': end_time}
+    run_stats = {'start_time': start_time, 'end_time': end_time, 'duration_seconds': end_time - start_time}
     info['run_stats'] = run_stats
 
-    def perf_from_stats(stats: dict) -> float:
+    def perf_from_stats(stats: dict) -> np.ndarray:
         return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1) #.mean().item()
+    
+    def aggregate_performance(performance: np.ndarray) -> float:
+        """takes an array of performances and outputs the metric we want to optimise with W&B
+        for now we use mean - std
+        """
+        mean = np.mean(performance)
+        std = np.std(performance)
+        print(f"Final performance: {mean} +- {std}")
+        return mean
+
 
     print("Finished Memory Iteration.")
     np.set_printoptions(precision=4, suppress=True)
-    print(f"Performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values'])}")
+    #print(f"Performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values'])}")
     print(
         f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values'])}"
     )
     final_performance = perf_from_stats(outs['final']['improved_mem']['measures']['values'])
-    print(f"Final performance after MI: {final_performance}")
+    final_performance_metric = aggregate_performance(final_performance)
+    print(f"Final performance after MI: {final_performance} (metric {final_performance_metric})")
     print(f"Saving results to {_results_path}")
     info['final_performance'] = final_performance
+    info['metric'] = final_performance_metric
+    if is_wandb_run:
+        wandb.log({
+            "run_duration_seconds": run_stats['duration_seconds'],
+            "save_path": str(_results_path),
+            "final_performances": final_performance,
+            "metric": final_performance_metric,
+        })
     numpyify_and_save(_results_path, info)
 
-    memory_profiling()
+    if not is_wandb_run:
+        memory_profiling()
+
+    if is_wandb_run:
+        wandb.finish()
 
 if __name__ == "__main__":
     main()

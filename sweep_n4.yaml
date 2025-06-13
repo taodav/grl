@@ -1,0 +1,72 @@
+# This file defines the sweep for n_mem_states = 2
+program: scripts/batch_run_kitchen_sinks_single_obj.py
+method: grid # bayes, random, grid (if grid then all parameters have to have a list of values, e.g. can't use "uniform" or "int_log_uniform" etc.)
+metric:
+  name: metric # has to be a key in the wandb.log
+  goal: maximize # We want to maximize performance
+parameters:
+  # -- Fixed parameter for this sweep --
+  n_mem_states:
+    value: 4
+
+  # -- Hyperparameters to search --
+  num_gammas:
+    values: [1, 3, 5] # Categorical search
+
+  mi_steps:
+    #distribution: int_log_uniform
+    #min: 10000
+    #max: 200000
+    values: [10000, 30000, 100000, 200000]
+  
+  pi_steps:
+    value: 10000
+
+  gamma_type:
+    value: uniform
+  gamma_min:
+    #distribution: uniform
+    #min: 0.3
+    #max: 0.9
+    values: [0.3, 0.6, 0.75, 0.9]
+  gamma_max:
+    value: 0.99
+  
+  # -- You can also fix other parameters if needed --
+  n_seeds:
+    value: 5
+  platform:
+    value: gpu
+  seed:
+    value: 42
+
+  spec:
+    value: parity_check
+  policy_optim_alg:
+    value: policy_grad
+  value_type:
+    value: q
+  error_type:
+    value: l2
+  alpha:
+    value: 1.0
+  objective:
+    value: sr_discrep_peter
+  optimizer:
+    value: adam
+  pi_lr:
+    value: 0.01
+  mi_lr:
+    value: 0.01
+  study_name:
+    value: hyperparams
+  reward_in_obs:
+    value: true
+
+# Add this entire command section
+command:
+  - ${env}
+  - python
+  - ${program}
+  - ${args_no_boolean_flags}
+  - ${if:reward_in_obs, "--reward_in_obs"}
