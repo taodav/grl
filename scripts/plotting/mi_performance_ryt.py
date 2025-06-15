@@ -15,10 +15,26 @@ from tqdm import tqdm
 config.update('jax_platform_name', 'cpu')
 np.set_printoptions(precision=4)
 plt.rcParams['axes.facecolor'] = 'white'
-plt.rcParams.update({'font.size': 18})
+plt.rcParams.update({'font.size': 24})
 
 from scripts.plotting.parse_experiments import parse_baselines, parse_dirs, parse_batch_dirs
 from definitions import ROOT_DIR
+
+colors = {
+    'pink': '#ff96b6',
+    'red': '#df5b5d',
+    'orange': '#DD8453',
+    'yellow': '#f8de7c',
+    'green': '#3FC57F',
+    'cyan': '#48dbe5',
+    'blue': '#3180df',
+    'purple': '#9d79cf',
+    'brown': '#886a2c',
+    'white': '#ffffff',
+    'light gray': '#d5d5d5',
+    'dark gray': '#666666',
+    'black': '#000000'
+}
 
 belief_perf = {
     '4x3.95': 2.001088974770953,
@@ -29,6 +45,16 @@ belief_perf = {
     'shuttle.95': 32.88972468934434,
     'tiger-alt-start': 3.7701893248807115,
     'tmaze_5_two_thirds_up': 2.1257640000000007
+}
+
+bars_to_colors = {
+    'memoryless': 'light gray',
+    'random_2': 'pink',
+    'random_4': 'red',
+    'ld_2': 'cyan',
+    'ld_4': 'blue',
+    'sr_discrep_peter_2': 'yellow',
+    'sr_discrep_peter_4': 'orange',
 }
 
 # %% codecell
@@ -45,7 +71,7 @@ experiment_dirs = [
     # Path(ROOT_DIR, 'results', 'gvf_pg_kitchen'),
 
     # Path(ROOT_DIR, 'results', 'obs_dep_gamma_pg_kitchen'),
-    Path(ROOT_DIR, 'results', 'obs_dep_uniform_gamma_0.8_0.99_pg_kitchen'),
+    Path(ROOT_DIR, 'results', 'obs_dep_uniform_gamma_0.8_0.99_rew_in_obs_pg_kitchen'),
 ]
 
 vi_results_dir = Path(ROOT_DIR, 'results', 'vi')
@@ -68,6 +94,11 @@ spec_plot_order = [
     'tmaze_5_two_thirds_up',
     'parity_check'
 ]
+obj_to_label = {
+    'random': 'Rand',
+    'ld': 'LD',
+    'sr_discrep_peter': 'GD'
+}
 
 # plot_key = 'final_memoryless_optimal_perf'  # for batch_run
 # plot_key = 'final_rand_avg_perf'  # for batch_run
@@ -215,7 +246,7 @@ ax.bar(x,
        bar_width,
        yerr=init_improvement_perf_std,
        label='Memoryless',
-       color='#5B97E0')
+       color=colors[bars_to_colors['memoryless']])
 
 mem_colors = ['#E0B625', '#DD8453', '#C44E52']
 exp_hatches = ['/', 'o', '+', '.']
@@ -243,26 +274,26 @@ for i, exp_name in enumerate(experiments):
                curr_mem_mean,
                bar_width,
                yerr=curr_mem_std,
-               label=f"{int(np.log2(n_mem_states))} Memory Bits",
-               hatch=exp_hatches[i],
-               color=mem_colors[j])
+               label=f"{int(np.log2(n_mem_states))} {obj_to_label[objective]} Bit(s)",
+               # hatch=exp_hatches[i],
+               color=colors[bars_to_colors[f'{objective}_{n_mem_states}']])
 
 ax.set_ylim([0, 1.05])
 ax.set_ylabel(f'Relative Performance\n (w.r.t. optimal belief & initial policy)')
 ax.set_xticks(x + group_width / 2)
 ax.set_xticklabels(xlabels)
-# ax.legend(bbox_to_anchor=(0.317, 0.62), framexalpha=0.95)
+ax.legend(bbox_to_anchor=(0.725, 0.45))
 # ax.set_title(f"Memory Iteration ({policy_optim_alg})")
 # alpha_str = 'uniform' if alpha == 1. else 'occupancy'
 residual_str = 'semi_grad' if not residual else 'residual'
 title_str = " vs. ".join([f"{obj} ({hatch})" for obj, hatch in zip(objectives, exp_hatches)])
 title_str = title + ' ' + title_str
 # ax.set_title(f"Memory: (MSTDE (dashes, {residual_str}) vs LD (dots))")
-ax.set_title(title_str)
+# ax.set_title(title_str)
 fig.tight_layout()
 
 plt.show()
 downloads = Path().home() / 'Downloads'
-# fig_path = downloads / f"{results_dir.stem}_{residual_str}_{alpha_str}.pdf"
-# fig.savefig(fig_path, bbox_inches='tight')
+fig_path = downloads / f"gd_analytical_res.pdf"
+fig.savefig(fig_path, bbox_inches='tight')
 # %% codecell
