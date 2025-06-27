@@ -26,3 +26,4 @@ todo.txt
 jax101.ipynb
 scripts/deep_rl_pomdps/
 wandb/
+plots/

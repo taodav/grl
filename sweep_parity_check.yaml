@@ -7,7 +7,7 @@ metric:
 parameters:
   # -- Fixed parameter for this sweep --
   n_mem_states:
-    value: 2
+    values: [2, 4]
 
   # -- Hyperparameters to search --
   num_gammas:
@@ -17,10 +17,10 @@ parameters:
     #distribution: int_log_uniform
     #min: 10000
     #max: 200000
-    values: [10000, 30000, 100000]
+    value: 50000 #[10000, 30000, 100000]
   
   pi_steps:
-    value: 5000
+    value: 3000
 
   gamma_type:
     value: uniform
@@ -28,13 +28,13 @@ parameters:
     #distribution: uniform
     #min: 0.3
     #max: 0.9
-    values: [0.3, 0.6, 0.75, 0.9]
+    value: 0.9  #[0.3, 0.6, 0.75, 0.9]
   gamma_max:
-    value: 0.99
+    value: 0.9
   
   # -- You can also fix other parameters if needed --
   n_seeds:
-    value: 5
+    value: 10
   platform:
     value: gpu
   seed:

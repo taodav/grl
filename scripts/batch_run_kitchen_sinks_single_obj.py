@@ -70,6 +70,11 @@ else:
     print("This is a local console run.")
     # Add logic specific to local/console runs here
 
+def perf_from_stats(stats: dict) -> np.ndarray:
+    #print("v:\n{}", stats['state_vals']['v'])
+    #print("p0:\n{}", stats['p0'])
+    return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1) #.mean().item()
+ 
 def get_args():
     # Args
     parser = argparse.ArgumentParser()
@@ -174,6 +179,20 @@ def get_args():
             setattr(args, key, value)
             
     return args
+
+def get_optimal_one_bit_memory_tmaze():
+    mem = jnp.zeros((4, 7, 2, 2))  # (action, obs, mem, mem)
+
+    # remember first obs
+    mem = mem.at[:, 0, :, 0].set(1.0)
+    mem = mem.at[:, 1, :, 1].set(1.0)
+
+    # otherwise just leave the memory as is
+    mem = mem.at[:, 2:, 0, 0].set(1.0)
+    mem = mem.at[:, 2:, 1, 1].set(1.0)
+
+    return mem
+
 
 def get_optimal_one_bit_memory_parity_check():
     mem = jnp.zeros((2, 8, 2, 2))  # (action, obs, mem, mem)
@@ -296,7 +315,11 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
             # We add a negative here to params_grad b/c we're trying to
             # maximize the PG objective (value of start state).
-            params_grad = -params_grad
+
+            l2_lambda = 0.003
+            params_grad = jax.tree.map(lambda g, p: -g + l2_lambda * p, params_grad, params)
+            #params_grad = -params_grad
+
             updates, tx_params = pi_optim.update(params_grad, tx_params, params)
             params = optax.apply_updates(params, updates)
             outs = (params, tx_params, pomdp)
@@ -319,6 +342,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
         after_pi_op_info['all_tested_pi_params'] = pi_params_with_memoryless_optimal
         info['after_pi_op'] = after_pi_op_info
+        print(f"Initial improvement performance: {perf_from_stats(info['after_pi_op']['initial_improvement_measures']['values'])}")
 
         if args.leave_out_optimal:
             pi_params_with_memoryless_optimal = pi_paramses[:-1]
@@ -331,6 +355,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
 
         # TODO remove; result: mem loss = 0, optimisation doesn't change mem loss, and policy gets perfect performance
         #mem_params = reverse_softmax(get_optimal_one_bit_memory_parity_check())
+        #mem_params = reverse_softmax(get_optimal_one_bit_memory_tmaze())
 
         # now we get our kitchen sink policies
         kitchen_sinks_info = {}
@@ -544,6 +569,7 @@ def make_experiment(args, rand_key: jax.random.PRNGKey):
                 'pi_params': ld_improved_pi_params,
                 'measures': batch_mem_log_all_measures(updated_mem_paramses, pomdp, ld_improved_pi_params)},
         }
+        #print(f"final improved pi params:\n{ld_improved_pi_params}")
 
         info['final'] = final_info
 
@@ -614,8 +640,8 @@ def main():
     rng, make_rng = jax.random.split(rng)
 
     t0 = time()
-    experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
-    #experiment_vjit_fn = jax.vmap(make_experiment(args, make_rng))
+    #experiment_vjit_fn = jax.jit(jax.vmap(make_experiment(args, make_rng)))
+    experiment_vjit_fn = jax.vmap(make_experiment(args, make_rng))
     # Run the experiment!
     # results will be batched over (n_seeds, random_policies + 1).
     # The + 1 is for the TD optimal policy.
@@ -630,15 +656,13 @@ def main():
     run_stats = {'start_time': start_time, 'end_time': end_time, 'duration_seconds': end_time - start_time}
     info['run_stats'] = run_stats
 
-    def perf_from_stats(stats: dict) -> np.ndarray:
-        return (stats['state_vals']['v'] * stats['p0']).sum(axis=-1) #.mean().item()
-    
+   
     def aggregate_performance(performance: np.ndarray) -> float:
         """takes an array of performances and outputs the metric we want to optimise with W&B
         for now we use mean - std
         """
-        mean = np.mean(performance)
-        std = np.std(performance)
+        mean = np.nanmean(performance)
+        std = np.nanstd(performance)
         print(f"Final performance: {mean} +- {std}")
         return mean
 
@@ -646,9 +670,7 @@ def main():
     print("Finished Memory Iteration.")
     np.set_printoptions(precision=4, suppress=True)
     #print(f"Performance across initial policies: {perf_from_stats(outs['beginning']['measures']['values'])}")
-    print(
-        f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values'])}"
-    )
+    print(f"Initial improvement performance: {perf_from_stats(outs['after_pi_op']['initial_improvement_measures']['values'])}")
     final_performance = perf_from_stats(outs['final']['improved_mem']['measures']['values'])
     final_performance_metric = aggregate_performance(final_performance)
     print(f"Final performance after MI: {final_performance} (metric {final_performance_metric})")
@@ -661,6 +683,8 @@ def main():
             "save_path": str(_results_path),
             "final_performances": final_performance,
             "metric": final_performance_metric,
+            "best_perf": np.nanmax(final_performance),
+            "worst_perf": np.nanmin(final_performance),
         })
     numpyify_and_save(_results_path, info)
 

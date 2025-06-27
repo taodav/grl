@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 
-def worker(worker_id: int, sweep_id: str, project_root: str, count: int):
+def worker(worker_id: int, sweep_id: str, project_root: str, count: int, job_id: str):
     """
     This function is executed by each worker process.
     It runs a wandb agent and redirects its output to a unique log file.
@@ -30,7 +30,7 @@ def worker(worker_id: int, sweep_id: str, project_root: str, count: int):
 
     # --- Logging setup ---
     # Create a dedicated directory for worker logs to keep things tidy.
-    worker_log_dir = os.path.join(project_root, "logs", "workers")
+    worker_log_dir = os.path.join(project_root, "logs", f"workers_{job_id}")
     os.makedirs(worker_log_dir, exist_ok=True)
 
     # Define unique output and error log files for this worker.
@@ -62,6 +62,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", type=int, default=8, help="Number of parallel agents to launch.")
     parser.add_argument("--project_root", type=str, default=".", help="The root directory of the project.")
     parser.add_argument("--count", type=int, default=0, help="Number of runs per agent. Use 0 to run continuously until the sweep is complete.")
+    parser.add_argument("--job_id", type=str, required=True, help="The Slurm Job ID for creating unique log directories.")
     args = parser.parse_args()
 
     processes = []
@@ -71,7 +72,7 @@ if __name__ == "__main__":
     try:
         # Launch each worker in its own process, passing the required arguments.
         for i in range(args.num_workers):
-            p = multiprocessing.Process(target=worker, args=(i, args.sweep_id, args.project_root, args.count))
+            p = multiprocessing.Process(target=worker, args=(i, args.sweep_id, args.project_root, args.count, args.job_id))
             processes.append(p)
             p.start()
 
